@@ -43,8 +43,13 @@ const SB = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
       method:'POST', headers: this.h(), body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    if (!r.ok) {
+      const err = await r.text();
+      console.error(`SB.post ${table} error:`, err, 'body:', JSON.stringify(body));
+      throw new Error(err);
+    }
+    const text = await r.text();
+    return text ? JSON.parse(text) : {};
   },
   async patch(table, query, body) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
@@ -137,7 +142,19 @@ const DB = {
 
   save(key, arr) { CACHE[key] = arr.map(toSnake); },
 
-  nextId(key, prefix) {
+  nextId(keyOrPrefix, prefixOrKey) {
+    // Handle both: nextId('students','S') and nextId('S', students_array)
+    let key, prefix;
+    if (TABLES[keyOrPrefix]) {
+      key = keyOrPrefix; prefix = prefixOrKey;
+    } else {
+      prefix = keyOrPrefix; key = prefixOrKey;
+      // if second arg is array (old style), use it directly
+      if (Array.isArray(key)) {
+        const nums = key.map(i=> parseInt((i.id||'').replace(prefix,''))||0);
+        return prefix + String((nums.length ? Math.max(...nums) : 0)+1).padStart(3,'0');
+      }
+    }
     const arr = CACHE[key]||[];
     const nums = arr.map(i=> parseInt((i.id||'').replace(prefix,''))||0);
     return prefix + String((nums.length ? Math.max(...nums) : 0)+1).padStart(3,'0');
