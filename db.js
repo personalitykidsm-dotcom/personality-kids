@@ -187,6 +187,18 @@ const DB = {
       console.log('✅ Supabase loaded:', keys.map(k => `${k}:${CACHE[k].length}`).join(', '));
       showLoadingScreen(false);
 
+      // Auto-refresh every 30 seconds to sync data from other devices
+      setInterval(async () => {
+        try {
+          const results = await Promise.all(
+            keys.map(k => SB.get(TABLES[k], 'order=id').catch(() => CACHE[k] || []))
+          );
+          keys.forEach((k, i) => { CACHE[k] = results[i] || []; });
+          // Re-render current page silently
+          if (typeof renderCurrentPage === 'function') renderCurrentPage();
+        } catch(e) { console.warn('Auto-refresh failed:', e); }
+      }, 30000);
+
     } catch(e) {
       console.error('Supabase error:', e);
       // fallback to localStorage
