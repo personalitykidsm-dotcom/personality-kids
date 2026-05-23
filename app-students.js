@@ -3,7 +3,7 @@
 // ============================================================
 
 // ===== ADD STUDENT MODAL =====
-function openAddStudent() {
+async function openAddStudent() {
   const html = `
   <div id="modal-student" class="modal-overlay open">
     <div class="modal modal-lg">
@@ -16,7 +16,7 @@ function openAddStudent() {
         <div class="form-row">
           <div class="form-group">
             <label>الكود (تلقائي)</label>
-            <input type="text" id="sId" value="${DB.nextId('students','S')}" readonly>
+            <input type="text" id="sId" value="${DB.nextId('S', await DB.all('students'))}" readonly>
           </div>
           <div class="form-group">
             <label>اسم الطالب *</label>
@@ -170,9 +170,8 @@ function openAddStudent() {
   document.getElementById('sStart').value    = new Date().toISOString().split('T')[0];
 
   // set branch from current filter
-  const _branch = (currentUser && currentUser.role !== 'admin') ? currentUser.branch : currentBranch;
-  if (_branch !== 'all') {
-    document.getElementById('sBranch').value = _branch;
+  if (currentBranch !== 'all') {
+    document.getElementById('sBranch').value = currentBranch;
   }
 }
 
@@ -267,7 +266,7 @@ function updateInstTotal() {
 }
 
 // ===== SAVE STUDENT =====
-function saveStudent() {
+async function saveStudent() {
   const name  = document.getElementById('sName').value.trim();
   const phone1= document.getElementById('sPhone1').value.trim();
   const fees  = parseFloat(document.getElementById('sFees').value) || 0;
@@ -293,7 +292,7 @@ function saveStudent() {
     notes:     document.getElementById('sNotes').value
   };
 
-  DB.add('students', student);
+  await DB.add('students', student);
 
   // save installments
   const rows = document.querySelectorAll('#instRows tr');
@@ -303,8 +302,9 @@ function saveStudent() {
     const date = row.querySelector('.inst-date').value;
     const note = row.querySelector('.inst-note').value;
     if (amt > 0) {
-      DB.add('installments', {
-        id:        DB.nextId('installments', instPrefix),
+      await DB.add('installments', {
+        id:        DB.nextId(instPrefix, await DB.all('installments')),
+        // auto-id
         studentId: id,
         num:       idx + 1,
         amount:    amt,
@@ -318,8 +318,8 @@ function saveStudent() {
   });
 
   closeModal('modal-student');
-  renderStudentsTable(activeGrade);
-  renderDashboard();
+  await renderStudentsTable(activeGrade);
+  await renderDashboard();
   showToast('✅ تم حفظ الطالب: ' + name);
 }
 
@@ -403,9 +403,11 @@ function printStudentForm() {
 }
 
 // ===== OPEN STUDENT INSTALLMENTS =====
-function openStudentInstallments(studentId) {
-  const s     = DB.all('students').find(x => x.id === studentId);
-  const insts = DB.all('installments').filter(i => i.studentId === studentId);
+async function openStudentInstallments(studentId) {
+  const allStudents = await DB.all('students');
+  const allInsts    = await DB.all('installments');
+  const s     = allStudents.find(x => x.id === studentId);
+  const insts = allInsts.filter(i => i.student_id === studentId || i.studentId === studentId);
   if (!s) return;
 
   const rows = insts.map(i => {
@@ -484,8 +486,9 @@ function openStudentInstallments(studentId) {
 }
 
 // ===== PAY INSTALLMENT =====
-function payInstallment(instId, studentId) {
-  const inst = DB.all('installments').find(i => i.id === instId);
+async function payInstallment(instId, studentId) {
+  const allInsts2 = await DB.all('installments');
+  const inst = allInsts2.find(i => i.id === instId);
   if (!inst) return;
 
   const methodHtml = `
@@ -618,7 +621,7 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
-    DB.update('installments', instId, {
+    await DB.update('installments', instId, {
       status:       newStatus,
       paidDate:     date,
       method,
@@ -627,7 +630,7 @@ function confirmPay(instId, studentId) {
       receiptImg:   receiptData || '',
       receiptName:  file?.name || ''
     });
-    DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
+    await DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
 
     document.getElementById('modal-pay').remove();
     openStudentInstallments(studentId);
@@ -645,8 +648,10 @@ function confirmPay(instId, studentId) {
 
 // ===== PRINT INSTALLMENTS PDF =====
 function printInstallmentsPDF(studentId) {
-  const s     = DB.all('students').find(x => x.id === studentId);
-  const insts = DB.all('installments').filter(i => i.studentId === studentId);
+  const allStudents = await DB.all('students');
+  const allInsts    = await DB.all('installments');
+  const s     = allStudents.find(x => x.id === studentId);
+  const insts = allInsts.filter(i => i.student_id === studentId || i.studentId === studentId);
   if (!s) return;
 
   const rows = insts.map(i => {
@@ -696,7 +701,8 @@ function printInstallmentsPDF(studentId) {
 
 // ===== VIEW RECEIPT IMAGE =====
 function viewReceipt(instId) {
-  const inst = DB.all('installments').find(i => i.id === instId);
+  const allInsts2 = await DB.all('installments');
+  const inst = allInsts2.find(i => i.id === instId);
   if (!inst || !inst.receiptImg) { showToast('لا توجد صورة إيصال'); return; }
   const win = window.open('', '_blank', 'width=600,height=700');
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
