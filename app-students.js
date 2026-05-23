@@ -647,7 +647,7 @@ function confirmPay(instId, studentId) {
 }
 
 // ===== PRINT INSTALLMENTS PDF =====
-function printInstallmentsPDF(studentId) {
+async function printInstallmentsPDF(studentId) {
   const allStudents = await DB.all('students');
   const allInsts    = await DB.all('installments');
   const s     = allStudents.find(x => x.id === studentId);
@@ -700,7 +700,7 @@ function printInstallmentsPDF(studentId) {
 }
 
 // ===== VIEW RECEIPT IMAGE =====
-function viewReceipt(instId) {
+async function viewReceipt(instId) {
   const allInsts2 = await DB.all('installments');
   const inst = allInsts2.find(i => i.id === instId);
   if (!inst || !inst.receiptImg) { showToast('لا توجد صورة إيصال'); return; }

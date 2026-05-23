@@ -145,12 +145,8 @@ const ADMIN_ONLY_PAGES = ['licenses'];
 const SUPERVISOR_BLOCKED_DEFAULT = ['licenses'];
 
 function getUserPermissions(user) {
-  // admin has all permissions
-  if (user.role === 'admin') return null; // null = unrestricted
-  // load per-user custom permissions (set via settings)
-  const custom = DB.get('userPerms_' + user.id);
-  if (custom) return custom; // array of allowed page IDs
-  // default: supervisors blocked from licenses
+  if (user.role === 'admin') return null;
+  // default: supervisors get all pages except blocked ones
   const allPages = Object.keys(PAGE_TITLES);
   return allPages.filter(p => !SUPERVISOR_BLOCKED_DEFAULT.includes(p));
 }
@@ -171,7 +167,7 @@ function applyNavPermissions(user) {
     // also check custom perms
     if (allowed && user.role !== 'admin') {
       const perms = getUserPermissions(user);
-      if (perms && !perms.includes(pageId)) {
+      if (perms && Array.isArray(perms) && !perms.includes(pageId)) {
         item.style.display = 'none';
       }
     }
@@ -277,9 +273,11 @@ async function renderDashboard() {
     ? (currentBranch === 'all' ? ['esh','sol','mat'] : [currentBranch])
     : [currentUser.branch];
 
-  const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => s.branch === currentUser.branch);
+  const _allSt = await DB.all('students');
+  const allStudents = Array.isArray(_allSt) ? _allSt : [];
+  const branchStudents = isAdmin ? allStudents : allStudents.filter(s => s.branch === currentUser.branch);
   const rows = branches.map(b => {
-    const bs   = allStudents.filter(s => s.branch === b);
+    const bs   = branchStudents.filter(s => s.branch === b);
     const bPaid= bs.reduce((s,st) => s + st.paid, 0);
     const bNet = bs.reduce((s,st) => s + st.net,  0);
     const pct  = bNet > 0 ? Math.round(bPaid / bNet * 100) : 0;
