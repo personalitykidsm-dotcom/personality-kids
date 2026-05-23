@@ -24,9 +24,10 @@ const PAGE_TITLES = {
 // ============================================================
 // BOOT
 // ============================================================
-document.addEventListener('DOMContentLoaded', async () => {
-  await DB.init();
-  await initLogin();
+document.addEventListener('DOMContentLoaded', () => {
+  DB.init();
+  if (typeof applyNurseryBranding === 'function') applyNurseryBranding();
+  initLogin();
   initNav();
   document.getElementById('currentDate').textContent =
     new Date().toLocaleDateString('ar-KW', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -35,8 +36,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 // LOGIN
 // ============================================================
-async function initLogin() {
-  const users = await DB.all('users');
+function initLogin() {
+  const users = DB.all('users');
   const sel   = document.getElementById('loginUser');
   sel.innerHTML = users.map(u =>
     `<option value="${u.id}">${u.name}</option>`
@@ -48,11 +49,11 @@ async function initLogin() {
   });
 }
 
-async function doLogin() {
+function doLogin() {
   const userId = document.getElementById('loginUser').value;
   const pin    = document.getElementById('loginPIN').value;
   const errEl  = document.getElementById('loginError');
-  const users  = await DB.all('users');
+  const users  = DB.all('users');
   const user   = users.find(u => u.id === userId);
 
   errEl.textContent = '';
@@ -70,30 +71,25 @@ async function doLogin() {
   // restrict branch selector for supervisors
   const branchSel = document.getElementById('branchSelect');
   if (user.role !== 'admin') {
-    // المشرف: إخفاء الـ selector كله — لا يحق له تغيير الفرع نهائياً
     branchSel.style.display = 'none';
     branchSel.value = user.branch;
-    currentBranch   = user.branch;
+    currentBranch = user.branch;
   } else {
-    // المدير: يرى كل الفروع
     branchSel.style.display = '';
-    Array.from(branchSel.options).forEach(o => {
-      o.style.display = '';
-      o.disabled = false;
-    });
+    Array.from(branchSel.options).forEach(o => { o.style.display = ''; o.disabled = false; });
   }
   branchSel.onchange = () => {
-    safeSetBranch(branchSel.value);
+    currentBranch = branchSel.value;
     renderCurrentPage();
   };
 
   // save last login
-  await DB.update('users', userId, { lastLogin: new Date().toLocaleString('ar-KW') });
+  DB.update('users', userId, { lastLogin: new Date().toLocaleString('ar-KW') });
 
   // apply nav visibility based on permissions
   applyNavPermissions(user);
 
-  // add logout button to topbar
+  // logout button
   let logoutBtn = document.getElementById('logoutBtn');
   if (!logoutBtn) {
     logoutBtn = document.createElement('button');
@@ -105,7 +101,6 @@ async function doLogin() {
     document.querySelector('.topbar-right').prepend(logoutBtn);
   }
 
-  // hide login screen
   document.getElementById('loginScreen').classList.add('hidden');
   showPage('dashboard');
   showToast('مرحباً ' + user.name + ' 👋');
@@ -113,20 +108,17 @@ async function doLogin() {
 
 function doLogout() {
   if (!confirm('هل تريد تسجيل الخروج؟')) return;
-  currentUser   = null;
+  currentUser = null;
   currentBranch = 'all';
   document.getElementById('avatarLetter').textContent = 'م';
-  document.getElementById('currentUser').textContent  = 'المدير';
-  document.getElementById('branchLabel').textContent  = '• كل الفروع';
+  document.getElementById('currentUser').textContent = 'المدير';
+  document.getElementById('branchLabel').textContent = '• كل الفروع';
   const btn = document.getElementById('logoutBtn');
   if (btn) btn.remove();
   const branchSel = document.getElementById('branchSelect');
-  branchSel.value        = 'all';
+  branchSel.value = 'all';
   branchSel.style.display = '';
-  Array.from(branchSel.options).forEach(o => {
-    o.disabled     = false;
-    o.style.display = '';
-  });
+  Array.from(branchSel.options).forEach(o => { o.disabled = false; o.style.display = ''; });
   branchSel.onchange = null;
   document.querySelectorAll('.nav-item[data-page]').forEach(i => i.style.display = '');
   document.getElementById('loginPIN').value = '';
@@ -145,8 +137,12 @@ const ADMIN_ONLY_PAGES = ['licenses'];
 const SUPERVISOR_BLOCKED_DEFAULT = ['licenses'];
 
 function getUserPermissions(user) {
-  if (user.role === 'admin') return null;
-  // default: supervisors get all pages except blocked ones
+  // admin has all permissions
+  if (user.role === 'admin') return null; // null = unrestricted
+  // load per-user custom permissions (set via settings)
+  const custom = DB.get('userPerms_' + user.id);
+  if (custom) return custom; // array of allowed page IDs
+  // default: supervisors blocked from licenses
   const allPages = Object.keys(PAGE_TITLES);
   return allPages.filter(p => !SUPERVISOR_BLOCKED_DEFAULT.includes(p));
 }
@@ -167,7 +163,7 @@ function applyNavPermissions(user) {
     // also check custom perms
     if (allowed && user.role !== 'admin') {
       const perms = getUserPermissions(user);
-      if (perms && Array.isArray(perms) && !perms.includes(pageId)) {
+      if (perms && !perms.includes(pageId)) {
         item.style.display = 'none';
       }
     }
@@ -211,7 +207,7 @@ function showPage(pageId) {
   renderPage(pageId);
 }
 
-async function renderCurrentPage() {
+function renderCurrentPage() {
   const active = document.querySelector('.page.active');
   if (active) {
     const id = active.id.replace('page-', '');
@@ -219,7 +215,7 @@ async function renderCurrentPage() {
   }
 }
 
-async function renderPage(id) {
+function renderPage(id) {
   const map = {
     dashboard: renderDashboard,
     students:  renderStudents,
@@ -239,11 +235,11 @@ async function renderPage(id) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-async function renderDashboard() {
-  const students  = filterByBranch(await DB.all('students'));
-  const installs  = await DB.all('installments');
-  const employees = filterByBranch(await DB.all('employees'));
-  const licenses  = await DB.all('licenses');
+function renderDashboard() {
+  const students  = filterByBranch(DB.all('students'));
+  const installs  = DB.all('installments');
+  const employees = filterByBranch(DB.all('employees'));
+  const licenses  = DB.all('licenses');
 
   const totalPaid    = students.reduce((s, st) => s + (st.paid || 0), 0);
   const totalNet     = students.reduce((s, st) => s + (st.net  || 0), 0);
@@ -267,17 +263,14 @@ async function renderDashboard() {
   `;
 
   // Branch summary table
-  // المشرف يرى فرعه فقط — المدير يرى حسب اختياره
   const isAdmin = currentUser && currentUser.role === 'admin';
   const branches = isAdmin
     ? (currentBranch === 'all' ? ['esh','sol','mat'] : [currentBranch])
     : [currentUser.branch];
 
-  const _allSt = await DB.all('students');
-  const allStudents = Array.isArray(_allSt) ? _allSt : [];
-  const branchStudents = isAdmin ? allStudents : allStudents.filter(s => s.branch === currentUser.branch);
+  const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => s.branch === currentUser.branch);
   const rows = branches.map(b => {
-    const bs   = branchStudents.filter(s => s.branch === b);
+    const bs   = allStudents.filter(s => s.branch === b);
     const bPaid= bs.reduce((s,st) => s + st.paid, 0);
     const bNet = bs.reduce((s,st) => s + st.net,  0);
     const pct  = bNet > 0 ? Math.round(bPaid / bNet * 100) : 0;
@@ -295,26 +288,18 @@ async function renderDashboard() {
     <thead><tr><th>الفرع</th><th>الطلاب</th><th>المحصّل</th><th>المتبقي</th><th>نسبة السداد</th></tr></thead>
     <tbody>${rows}</tbody>`;
 
-  // Alerts — فلترة حسب الفرع للمشرف
+  // Alerts
   const alerts = [];
-  const myInstalls = isAdmin ? installs : installs.filter(i => {
-    const st = DB.all('students').find(s => s.id === i.studentId);
-    return st && st.branch === currentUser.branch;
-  });
-  const lateMyInst = myInstalls.filter(i => i.status === 'pending' && daysUntil(i.dueDate) < 0);
-  if (lateMyInst.length)
-    alerts.push(`<div class="alert alert-danger">⚠️ <div><b>${lateMyInst.length} قسط</b> متأخر عن موعد السداد</div></div>`);
+  if (lateInst.length)
+    alerts.push(`<div class="alert alert-danger">⚠️ <div><b>${lateInst.length} قسط</b> متأخر عن موعد السداد</div></div>`);
 
-  // التراخيص للمدير فقط
-  if (isAdmin) {
-    licenses.forEach(l => {
-      const d = daysUntil(l.expiryDate);
-      if (d < 0)
-        alerts.push(`<div class="alert alert-danger">📜 ترخيص <b>${l.name}</b> منتهي منذ ${Math.abs(d)} يوم</div>`);
-      else if (d < 60)
-        alerts.push(`<div class="alert alert-warning">📜 ترخيص <b>${l.name}</b> ينتهي خلال <b>${d} يوم</b></div>`);
-    });
-  }
+  licenses.forEach(l => {
+    const d = daysUntil(l.expiryDate);
+    if (d < 0)
+      alerts.push(`<div class="alert alert-danger">📜 ترخيص <b>${l.name}</b> منتهي منذ ${Math.abs(d)} يوم</div>`);
+    else if (d < 60)
+      alerts.push(`<div class="alert alert-warning">📜 ترخيص <b>${l.name}</b> ينتهي خلال <b>${d} يوم</b></div>`);
+  });
 
   const expiring = DB.all('supplies').filter(p => daysUntil(p.expiryDate) < 30 && daysUntil(p.expiryDate) >= 0);
   if (expiring.length)
@@ -329,7 +314,7 @@ async function renderDashboard() {
 // ============================================================
 // STUDENTS
 // ============================================================
-async function renderStudents() {
+function renderStudents() {
   const container = document.getElementById('studentsFilter');
   container.innerHTML = `
     <span class="filter-chip ${currentBranch==='all'?'active':''}" onclick="setBranchFilter('all',this)">كل الفروع</span>
@@ -361,7 +346,6 @@ function gradeFilter(grade, el) {
 }
 
 function setBranchFilter(branch, el) {
-  // المشرف لا يستطيع تغيير الفرع نهائياً
   if (currentUser && currentUser.role !== 'admin') return;
   currentBranch = branch;
   document.getElementById('branchSelect').value = branch;
@@ -374,8 +358,8 @@ function setBranchFilter(branch, el) {
   el.classList.add('active');
 }
 
-async function renderStudentsTable(grade) {
-  let list = filterByBranch(await DB.all('students'));
+function renderStudentsTable(grade) {
+  let list = filterByBranch(DB.all('students'));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
 
   const gradeLabel = { nursery:'حضانة', KG1:'KG1', KG2:'KG2' };
@@ -418,19 +402,11 @@ async function renderStudentsTable(grade) {
 // UTIL — filter by current branch
 // ============================================================
 function filterByBranch(arr) {
-  // المشرف: يرى فرعه فقط — لا يمكن تجاوز هذا القيد
   if (currentUser && currentUser.role !== 'admin') {
     return arr.filter(i => i.branch === currentUser.branch);
   }
-  // المدير: يفلتر حسب الفرع المختار
   if (!currentBranch || currentBranch === 'all') return arr;
   return arr.filter(i => i.branch === currentBranch);
-}
-
-// منع تغيير currentBranch للمشرف من أي مكان
-function safeSetBranch(branch) {
-  if (currentUser && currentUser.role !== 'admin') return; // مشرف لا يغير
-  currentBranch = branch;
 }
 
 // ============================================================
@@ -468,12 +444,11 @@ document.addEventListener('keydown', e => {
 function openAddStudent()          { showToast('جارٍ تحميل النموذج...'); }
 function openEditStudent(id)       { showToast('تعديل: ' + id); }
 
-async function deleteStudent(id, name) {
+function deleteStudent(id, name) {
   if (!confirm('هل تريد حذف الطالب "' + name + '"؟\nسيتم حذف جميع أقساطه أيضاً.')) return;
-  // حذف الطالب
-  await DB.remove('students', id);
-  // أقساطه بتتحذف تلقائياً (cascade)
-  await renderStudentsTable(activeGrade);
+  DB.remove('students', id);
+  const remaining = DB.all('installments').filter(i => i.studentId !== id);
+  DB.save('installments', remaining);
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }

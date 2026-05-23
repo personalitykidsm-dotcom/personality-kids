@@ -3,7 +3,7 @@
 // ============================================================
 
 // ===== ADD STUDENT MODAL =====
-async function openAddStudent() {
+function openAddStudent() {
   const html = `
   <div id="modal-student" class="modal-overlay open">
     <div class="modal modal-lg">
@@ -16,7 +16,7 @@ async function openAddStudent() {
         <div class="form-row">
           <div class="form-group">
             <label>الكود (تلقائي)</label>
-            <input type="text" id="sId" value="${DB.nextId('S', await DB.all('students'))}" readonly>
+            <input type="text" id="sId" value="${DB.nextId('students','S')}" readonly>
           </div>
           <div class="form-group">
             <label>اسم الطالب *</label>
@@ -266,7 +266,7 @@ function updateInstTotal() {
 }
 
 // ===== SAVE STUDENT =====
-async function saveStudent() {
+function saveStudent() {
   const name  = document.getElementById('sName').value.trim();
   const phone1= document.getElementById('sPhone1').value.trim();
   const fees  = parseFloat(document.getElementById('sFees').value) || 0;
@@ -292,7 +292,7 @@ async function saveStudent() {
     notes:     document.getElementById('sNotes').value
   };
 
-  await DB.add('students', student);
+  DB.add('students', student);
 
   // save installments
   const rows = document.querySelectorAll('#instRows tr');
@@ -302,9 +302,8 @@ async function saveStudent() {
     const date = row.querySelector('.inst-date').value;
     const note = row.querySelector('.inst-note').value;
     if (amt > 0) {
-      await DB.add('installments', {
-        id:        DB.nextId(instPrefix, await DB.all('installments')),
-        // auto-id
+      DB.add('installments', {
+        id:        DB.nextId('installments', instPrefix),
         studentId: id,
         num:       idx + 1,
         amount:    amt,
@@ -318,8 +317,8 @@ async function saveStudent() {
   });
 
   closeModal('modal-student');
-  await renderStudentsTable(activeGrade);
-  await renderDashboard();
+  renderStudentsTable(activeGrade);
+  renderDashboard();
   showToast('✅ تم حفظ الطالب: ' + name);
 }
 
@@ -403,11 +402,9 @@ function printStudentForm() {
 }
 
 // ===== OPEN STUDENT INSTALLMENTS =====
-async function openStudentInstallments(studentId) {
-  const allStudents = await DB.all('students');
-  const allInsts    = await DB.all('installments');
-  const s     = allStudents.find(x => x.id === studentId);
-  const insts = allInsts.filter(i => i.student_id === studentId || i.studentId === studentId);
+function openStudentInstallments(studentId) {
+  const s     = DB.all('students').find(x => x.id === studentId);
+  const insts = DB.all('installments').filter(i => i.studentId === studentId);
   if (!s) return;
 
   const rows = insts.map(i => {
@@ -486,9 +483,8 @@ async function openStudentInstallments(studentId) {
 }
 
 // ===== PAY INSTALLMENT =====
-async function payInstallment(instId, studentId) {
-  const allInsts2 = await DB.all('installments');
-  const inst = allInsts2.find(i => i.id === instId);
+function payInstallment(instId, studentId) {
+  const inst = DB.all('installments').find(i => i.id === instId);
   if (!inst) return;
 
   const methodHtml = `
@@ -621,7 +617,7 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
-    await DB.update('installments', instId, {
+    DB.update('installments', instId, {
       status:       newStatus,
       paidDate:     date,
       method,
@@ -630,7 +626,7 @@ function confirmPay(instId, studentId) {
       receiptImg:   receiptData || '',
       receiptName:  file?.name || ''
     });
-    await DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
+    DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
 
     document.getElementById('modal-pay').remove();
     openStudentInstallments(studentId);
@@ -647,11 +643,9 @@ function confirmPay(instId, studentId) {
 }
 
 // ===== PRINT INSTALLMENTS PDF =====
-async function printInstallmentsPDF(studentId) {
-  const allStudents = await DB.all('students');
-  const allInsts    = await DB.all('installments');
-  const s     = allStudents.find(x => x.id === studentId);
-  const insts = allInsts.filter(i => i.student_id === studentId || i.studentId === studentId);
+function printInstallmentsPDF(studentId) {
+  const s     = DB.all('students').find(x => x.id === studentId);
+  const insts = DB.all('installments').filter(i => i.studentId === studentId);
   if (!s) return;
 
   const rows = insts.map(i => {
@@ -700,9 +694,8 @@ async function printInstallmentsPDF(studentId) {
 }
 
 // ===== VIEW RECEIPT IMAGE =====
-async function viewReceipt(instId) {
-  const allInsts2 = await DB.all('installments');
-  const inst = allInsts2.find(i => i.id === instId);
+function viewReceipt(instId) {
+  const inst = DB.all('installments').find(i => i.id === instId);
   if (!inst || !inst.receiptImg) { showToast('لا توجد صورة إيصال'); return; }
   const win = window.open('', '_blank', 'width=600,height=700');
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
