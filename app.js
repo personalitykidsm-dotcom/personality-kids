@@ -70,20 +70,13 @@ function doLogin() {
   // restrict branch selector for supervisors
   const branchSel = document.getElementById('branchSelect');
   if (user.role !== 'admin') {
-    // إخفاء الفروع الأخرى تماماً للمشرف
-    Array.from(branchSel.options).forEach(o => {
-      if (o.value !== 'all' && o.value !== user.branch) {
-        o.style.display = 'none';
-        o.disabled = true;
-      } else {
-        o.style.display = '';
-        o.disabled = false;
-      }
-    });
+    // المشرف: إخفاء الـ selector كله — لا يحق له تغيير الفرع نهائياً
+    branchSel.style.display = 'none';
     branchSel.value = user.branch;
-    currentBranch = user.branch;
+    currentBranch   = user.branch;
   } else {
-    // المدير يرى كل الفروع
+    // المدير: يرى كل الفروع
+    branchSel.style.display = '';
     Array.from(branchSel.options).forEach(o => {
       o.style.display = '';
       o.disabled = false;
@@ -128,9 +121,10 @@ function doLogout() {
   const btn = document.getElementById('logoutBtn');
   if (btn) btn.remove();
   const branchSel = document.getElementById('branchSelect');
-  branchSel.value = 'all';
+  branchSel.value        = 'all';
+  branchSel.style.display = '';
   Array.from(branchSel.options).forEach(o => {
-    o.disabled = false;
+    o.disabled     = false;
     o.style.display = '';
   });
   branchSel.onchange = null;
