@@ -233,7 +233,7 @@ function repTab(el, id) {
 
 function renderPaymentsReport(branchF) {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   const rows = installs.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
@@ -255,7 +255,7 @@ function renderPaymentsReport(branchF) {
 
 function renderPlanReport() {
   const installs = DB.all('installments');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   const rows = installs.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
@@ -741,7 +741,7 @@ function supShowTab(id) {
 }
 
 function supBuildAdminDash() {
-  const items = DB.all('supplies');
+  const items = filterByBranch(DB.all('supplies'));
   const expiring = items.filter(s=>daysUntil(s.expiryDate)>=0&&daysUntil(s.expiryDate)<30);
   const expired  = items.filter(s=>daysUntil(s.expiryDate)<0);
   const alerts = [...expired.map(s=>`<div style="padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:6px;border:1px solid #fca5a5;background:#fef2f2;color:#991b1b">🔴 ${s.name} (${BRANCHES[s.branch]?.name}): منتهي الصلاحية</div>`),
@@ -1057,7 +1057,7 @@ function exportFeesExcel() {
 
 function exportPaymentsExcel() {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   const data = installs.map(i => {
     const s = students.find(x => x.id === i.studentId) || {};
     return {
@@ -1071,7 +1071,7 @@ function exportPaymentsExcel() {
 
 function exportPlanExcel() {
   const installs = DB.all('installments');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   const data = installs.map(i => {
     const s    = students.find(x => x.id === i.studentId) || {};
     const late = i.status === 'pending' && daysUntil(i.dueDate) < 0;
@@ -1123,7 +1123,7 @@ function printFeesReport() {
 
 function printPaymentsReport() {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   printReport('تقرير المدفوعات',
     ['الطالب','الفرع','تاريخ الدفع','المبلغ','الطريقة'],
     installs.map(i => {
@@ -1135,7 +1135,7 @@ function printPaymentsReport() {
 
 function printPlanReport() {
   const installs = DB.all('installments');
-  const students = DB.all('students');
+  const students = filterByBranch(DB.all('students'));
   printReport('خطة الأقساط',
     ['الطالب','الفرع','القسط','المبلغ','الاستحقاق','الدفع','الحالة'],
     installs.map(i => {

@@ -170,8 +170,9 @@ function openAddStudent() {
   document.getElementById('sStart').value    = new Date().toISOString().split('T')[0];
 
   // set branch from current filter
-  if (currentBranch !== 'all') {
-    document.getElementById('sBranch').value = currentBranch;
+  const _branch = (currentUser && currentUser.role !== 'admin') ? currentUser.branch : currentBranch;
+  if (_branch !== 'all') {
+    document.getElementById('sBranch').value = _branch;
   }
 }
 

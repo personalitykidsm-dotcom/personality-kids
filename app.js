@@ -83,7 +83,7 @@ function doLogin() {
     });
   }
   branchSel.onchange = () => {
-    currentBranch = branchSel.value;
+    safeSetBranch(branchSel.value);
     renderCurrentPage();
   };
 
@@ -410,12 +410,19 @@ function renderStudentsTable(grade) {
 // UTIL — filter by current branch
 // ============================================================
 function filterByBranch(arr) {
-  // المشرف لا يرى إلا بيانات فرعه بغض النظر عن currentBranch
+  // المشرف: يرى فرعه فقط — لا يمكن تجاوز هذا القيد
   if (currentUser && currentUser.role !== 'admin') {
     return arr.filter(i => i.branch === currentUser.branch);
   }
-  if (currentBranch === 'all') return arr;
+  // المدير: يفلتر حسب الفرع المختار
+  if (!currentBranch || currentBranch === 'all') return arr;
   return arr.filter(i => i.branch === currentBranch);
+}
+
+// منع تغيير currentBranch للمشرف من أي مكان
+function safeSetBranch(branch) {
+  if (currentUser && currentUser.role !== 'admin') return; // مشرف لا يغير
+  currentBranch = branch;
 }
 
 // ============================================================
