@@ -133,15 +133,25 @@ const DB = {
     const row = toSnake(item);
     CACHE[key] = CACHE[key] || [];
     CACHE[key].push(row);
-    // fire-and-forget
-    SB.post(TABLES[key] || key, row).catch(e => console.warn('SB.add error:', e));
+    // post to Supabase then refresh cache
+    SB.post(TABLES[key] || key, row)
+      .then(() => SB.get(TABLES[key] || key, 'order=id')
+        .then(rows => { CACHE[key] = rows || []; })
+        .catch(()=>{})
+      )
+      .catch(e => console.warn('SB.add error:', e));
   },
 
   // Update item by id
   update(key, id, changes) {
     const row = toSnake(changes);
     CACHE[key] = (CACHE[key] || []).map(i => i.id === id ? {...i, ...row} : i);
-    SB.patch(TABLES[key] || key, 'id=eq.' + id, row).catch(e => console.warn('SB.update error:', e));
+    SB.patch(TABLES[key] || key, 'id=eq.' + id, row)
+      .then(() => SB.get(TABLES[key] || key, 'order=id')
+        .then(rows => { CACHE[key] = rows || []; })
+        .catch(()=>{})
+      )
+      .catch(e => console.warn('SB.update error:', e));
   },
 
   // Remove item by id
@@ -179,10 +189,7 @@ const DB = {
       const settings = await SB.get('settings').catch(() => []);
       settings.forEach(s => { CACHE['setting_' + s.key] = s.value; });
 
-      // If no users yet, seed demo data
-      if (!CACHE.users || !CACHE.users.length) {
-        await seedDemoData();
-      }
+      // Users already exist in Supabase — no auto-seed
 
       console.log('✅ Supabase loaded:', keys.map(k => `${k}:${CACHE[k].length}`).join(', '));
       showLoadingScreen(false);
