@@ -26,42 +26,45 @@ const CACHE = {};
 // SUPABASE REST
 // ============================================================
 const SB = {
-  h() {
+  h(extra={}) {
     return {
       'apikey': SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
       'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
+      ...extra
     };
   },
   async get(table, query='') {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { headers: this.h() });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) { console.error('SB.get error:', await r.text()); return []; }
     return r.json();
   },
   async post(table, body) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-      method:'POST', headers: this.h(), body: JSON.stringify(body)
+      method:'POST',
+      headers: this.h({'Prefer':'return=minimal'}),
+      body: JSON.stringify(body)
     });
     if (!r.ok) {
       const err = await r.text();
-      console.error(`SB.post ${table} error:`, err, 'body:', JSON.stringify(body));
+      console.error(`SB.post ${table} error:`, err, '| body:', JSON.stringify(body));
       throw new Error(err);
     }
-    const text = await r.text();
-    return text ? JSON.parse(text) : {};
+    return {};
   },
   async patch(table, query, body) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-      method:'PATCH', headers: this.h(), body: JSON.stringify(body)
+      method:'PATCH',
+      headers: this.h({'Prefer':'return=minimal'}),
+      body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) { console.error('SB.patch error:', await r.text()); }
   },
   async delete(table, query) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
       method:'DELETE', headers: this.h()
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) { console.error('SB.delete error:', await r.text()); }
   }
 };
 
