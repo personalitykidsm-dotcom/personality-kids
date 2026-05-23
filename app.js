@@ -24,9 +24,9 @@ const PAGE_TITLES = {
 // ============================================================
 // BOOT
 // ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  DB.init();
-  initLogin();
+document.addEventListener('DOMContentLoaded', async () => {
+  await DB.init();
+  await initLogin();
   initNav();
   document.getElementById('currentDate').textContent =
     new Date().toLocaleDateString('ar-KW', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
@@ -35,8 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // LOGIN
 // ============================================================
-function initLogin() {
-  const users = DB.all('users');
+async function initLogin() {
+  const users = await DB.all('users');
   const sel   = document.getElementById('loginUser');
   sel.innerHTML = users.map(u =>
     `<option value="${u.id}">${u.name}</option>`
@@ -48,11 +48,11 @@ function initLogin() {
   });
 }
 
-function doLogin() {
+async function doLogin() {
   const userId = document.getElementById('loginUser').value;
   const pin    = document.getElementById('loginPIN').value;
   const errEl  = document.getElementById('loginError');
-  const users  = DB.all('users');
+  const users  = await DB.all('users');
   const user   = users.find(u => u.id === userId);
 
   errEl.textContent = '';
@@ -88,7 +88,7 @@ function doLogin() {
   };
 
   // save last login
-  DB.update('users', userId, { lastLogin: new Date().toLocaleString('ar-KW') });
+  await DB.update('users', userId, { lastLogin: new Date().toLocaleString('ar-KW') });
 
   // apply nav visibility based on permissions
   applyNavPermissions(user);
@@ -215,7 +215,7 @@ function showPage(pageId) {
   renderPage(pageId);
 }
 
-function renderCurrentPage() {
+async function renderCurrentPage() {
   const active = document.querySelector('.page.active');
   if (active) {
     const id = active.id.replace('page-', '');
@@ -223,7 +223,7 @@ function renderCurrentPage() {
   }
 }
 
-function renderPage(id) {
+async function renderPage(id) {
   const map = {
     dashboard: renderDashboard,
     students:  renderStudents,
@@ -243,11 +243,11 @@ function renderPage(id) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-function renderDashboard() {
-  const students  = filterByBranch(DB.all('students'));
-  const installs  = DB.all('installments');
-  const employees = filterByBranch(DB.all('employees'));
-  const licenses  = DB.all('licenses');
+async function renderDashboard() {
+  const students  = filterByBranch(await DB.all('students'));
+  const installs  = await DB.all('installments');
+  const employees = filterByBranch(await DB.all('employees'));
+  const licenses  = await DB.all('licenses');
 
   const totalPaid    = students.reduce((s, st) => s + (st.paid || 0), 0);
   const totalNet     = students.reduce((s, st) => s + (st.net  || 0), 0);
@@ -271,11 +271,13 @@ function renderDashboard() {
   `;
 
   // Branch summary table
-  const branches = currentBranch === 'all'
-    ? ['esh','sol','mat']
-    : [currentBranch];
+  // المشرف يرى فرعه فقط — المدير يرى حسب اختياره
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const branches = isAdmin
+    ? (currentBranch === 'all' ? ['esh','sol','mat'] : [currentBranch])
+    : [currentUser.branch];
 
-  const allStudents = DB.all('students');
+  const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => s.branch === currentUser.branch);
   const rows = branches.map(b => {
     const bs   = allStudents.filter(s => s.branch === b);
     const bPaid= bs.reduce((s,st) => s + st.paid, 0);
@@ -295,18 +297,26 @@ function renderDashboard() {
     <thead><tr><th>الفرع</th><th>الطلاب</th><th>المحصّل</th><th>المتبقي</th><th>نسبة السداد</th></tr></thead>
     <tbody>${rows}</tbody>`;
 
-  // Alerts
+  // Alerts — فلترة حسب الفرع للمشرف
   const alerts = [];
-  if (lateInst.length)
-    alerts.push(`<div class="alert alert-danger">⚠️ <div><b>${lateInst.length} قسط</b> متأخر عن موعد السداد</div></div>`);
-
-  licenses.forEach(l => {
-    const d = daysUntil(l.expiryDate);
-    if (d < 0)
-      alerts.push(`<div class="alert alert-danger">📜 ترخيص <b>${l.name}</b> منتهي منذ ${Math.abs(d)} يوم</div>`);
-    else if (d < 60)
-      alerts.push(`<div class="alert alert-warning">📜 ترخيص <b>${l.name}</b> ينتهي خلال <b>${d} يوم</b></div>`);
+  const myInstalls = isAdmin ? installs : installs.filter(i => {
+    const st = DB.all('students').find(s => s.id === i.studentId);
+    return st && st.branch === currentUser.branch;
   });
+  const lateMyInst = myInstalls.filter(i => i.status === 'pending' && daysUntil(i.dueDate) < 0);
+  if (lateMyInst.length)
+    alerts.push(`<div class="alert alert-danger">⚠️ <div><b>${lateMyInst.length} قسط</b> متأخر عن موعد السداد</div></div>`);
+
+  // التراخيص للمدير فقط
+  if (isAdmin) {
+    licenses.forEach(l => {
+      const d = daysUntil(l.expiryDate);
+      if (d < 0)
+        alerts.push(`<div class="alert alert-danger">📜 ترخيص <b>${l.name}</b> منتهي منذ ${Math.abs(d)} يوم</div>`);
+      else if (d < 60)
+        alerts.push(`<div class="alert alert-warning">📜 ترخيص <b>${l.name}</b> ينتهي خلال <b>${d} يوم</b></div>`);
+    });
+  }
 
   const expiring = DB.all('supplies').filter(p => daysUntil(p.expiryDate) < 30 && daysUntil(p.expiryDate) >= 0);
   if (expiring.length)
@@ -321,7 +331,7 @@ function renderDashboard() {
 // ============================================================
 // STUDENTS
 // ============================================================
-function renderStudents() {
+async function renderStudents() {
   const container = document.getElementById('studentsFilter');
   container.innerHTML = `
     <span class="filter-chip ${currentBranch==='all'?'active':''}" onclick="setBranchFilter('all',this)">كل الفروع</span>
@@ -366,8 +376,8 @@ function setBranchFilter(branch, el) {
   el.classList.add('active');
 }
 
-function renderStudentsTable(grade) {
-  let list = filterByBranch(DB.all('students'));
+async function renderStudentsTable(grade) {
+  let list = filterByBranch(await DB.all('students'));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
 
   const gradeLabel = { nursery:'حضانة', KG1:'KG1', KG2:'KG2' };
@@ -460,13 +470,12 @@ document.addEventListener('keydown', e => {
 function openAddStudent()          { showToast('جارٍ تحميل النموذج...'); }
 function openEditStudent(id)       { showToast('تعديل: ' + id); }
 
-function deleteStudent(id, name) {
+async function deleteStudent(id, name) {
   if (!confirm('هل تريد حذف الطالب "' + name + '"؟\nسيتم حذف جميع أقساطه أيضاً.')) return;
   // حذف الطالب
-  DB.remove('students', id);
-  // حذف أقساطه
-  const remaining = DB.all('installments').filter(i => i.studentId !== id);
-  DB.save('installments', remaining);
+  await DB.remove('students', id);
+  // أقساطه بتتحذف تلقائياً (cascade)
+  await renderStudentsTable(activeGrade);
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }
