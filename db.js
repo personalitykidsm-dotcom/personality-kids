@@ -194,17 +194,27 @@ const DB = {
       console.log('✅ Supabase loaded:', keys.map(k => `${k}:${CACHE[k].length}`).join(', '));
       showLoadingScreen(false);
 
-      // Auto-refresh every 30 seconds to sync data from other devices
+      // Auto-refresh every 10 seconds to sync data from other devices
       setInterval(async () => {
         try {
           const results = await Promise.all(
             keys.map(k => SB.get(TABLES[k], 'order=id').catch(() => CACHE[k] || []))
           );
-          keys.forEach((k, i) => { CACHE[k] = results[i] || []; });
-          // Re-render current page silently
-          if (typeof renderCurrentPage === 'function') renderCurrentPage();
+          let changed = false;
+          keys.forEach((k, i) => {
+            const newData = JSON.stringify(results[i] || []);
+            const oldData = JSON.stringify(CACHE[k] || []);
+            if (newData !== oldData) {
+              CACHE[k] = results[i] || [];
+              changed = true;
+            }
+          });
+          // Only re-render if data actually changed
+          if (changed && typeof renderCurrentPage === 'function') {
+            renderCurrentPage();
+          }
         } catch(e) { console.warn('Auto-refresh failed:', e); }
-      }, 30000);
+      }, 10000);
 
     } catch(e) {
       console.error('Supabase error:', e);
