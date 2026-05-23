@@ -24,8 +24,8 @@ const PAGE_TITLES = {
 // ============================================================
 // BOOT
 // ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  DB.init();
+document.addEventListener('DOMContentLoaded', async () => {
+  await DB.init();
   if (typeof applyNurseryBranding === 'function') applyNurseryBranding();
   initLogin();
   initNav();

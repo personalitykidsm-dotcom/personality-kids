@@ -1,6 +1,9 @@
 // ============================================================
-// DB.JS  —  localStorage data layer + sample seed data
+// DB.JS — Supabase + local cache (sync interface)
 // ============================================================
+
+const SUPABASE_URL = 'https://idtopctbogyaciasftza.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkdG9wY3Rib2d5YWNpYXNmdHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzE0NTUsImV4cCI6MjA5NTEwNzQ1NX0.DG6e0Fh7oHC5A588Jhupcs6yVb91D_vfKKwN60FUdiQ';
 
 const BRANCHES = {
   all: { name: 'كل الفروع',   badge: 'badge-gray'   },
@@ -14,158 +17,313 @@ const ROLES_HR = [
   'إدارية','محاسبة','سائق','عامل نظافة','طباخة','أمن'
 ];
 
-// ---- seed data ----
-const SEED = {
-  users: [
-    { id:'admin', name:'المدير العام',      branch:'all', avatar:'م', pin:'1234', role:'admin',      lastLogin:'' },
-    { id:'esh',   name:'مشرفة اشبيلية',    branch:'esh', avatar:'ش', pin:'1234', role:'supervisor', lastLogin:'' },
-    { id:'sol',   name:'مشرفة الصليبخات',  branch:'sol', avatar:'ص', pin:'1234', role:'supervisor', lastLogin:'' },
-    { id:'mat',   name:'مشرفة المطلاع',    branch:'mat', avatar:'م', pin:'1234', role:'supervisor', lastLogin:'' }
-  ],
-  students: [
-    { id:'S001', name:'أحمد محمد الرشيد',   branch:'esh', grade:'KG1',     phone1:'96550001', phone2:'96550002', dob:'2020-03-15', startDate:'2023-09-01', fees:1200, discount:0, net:1200, paid:900  },
-    { id:'S002', name:'سارة علي الكندري',   branch:'sol', grade:'KG2',     phone1:'96550003', phone2:'',         dob:'2019-07-22', startDate:'2023-09-01', fees:1200, discount:0, net:1200, paid:1200 },
-    { id:'S003', name:'فهد ناصر العازمي',   branch:'mat', grade:'nursery', phone1:'96550005', phone2:'96550006', dob:'2021-01-10', startDate:'2024-01-01', fees:900,  discount:0, net:900,  paid:300  },
-    { id:'S004', name:'نورة سعد المطيري',   branch:'esh', grade:'KG1',     phone1:'96551001', phone2:'',         dob:'2020-06-20', startDate:'2023-09-01', fees:1200, discount:100, net:1100, paid:1100 },
-    { id:'S005', name:'خالد عبدالله العنزي',branch:'sol', grade:'KG2',     phone1:'96552001', phone2:'96552002', dob:'2019-11-05', startDate:'2023-09-01', fees:1200, discount:0, net:1200, paid:600  },
-    { id:'S006', name:'هدى محمد الشمري',    branch:'mat', grade:'nursery', phone1:'96553001', phone2:'',         dob:'2021-04-18', startDate:'2024-01-01', fees:900,  discount:0, net:900,  paid:0    }
-  ],
-  installments: [
-    { id:'I001', studentId:'S001', num:1, amount:300, dueDate:'2023-10-01', paidDate:'2023-10-03', method:'نقدي',   status:'paid'    },
-    { id:'I002', studentId:'S001', num:2, amount:300, dueDate:'2023-12-01', paidDate:'2023-12-05', method:'كي نت', status:'paid'    },
-    { id:'I003', studentId:'S001', num:3, amount:300, dueDate:'2024-02-01', paidDate:'2024-02-02', method:'نقدي',   status:'paid'    },
-    { id:'I004', studentId:'S001', num:4, amount:300, dueDate:'2024-04-01', paidDate:'',           method:'',       status:'pending' },
-    { id:'I005', studentId:'S002', num:1, amount:1200,dueDate:'2023-10-01', paidDate:'2023-10-01', method:'برنامج', status:'paid'    },
-    { id:'I006', studentId:'S003', num:1, amount:300, dueDate:'2024-02-01', paidDate:'2024-02-10', method:'نقدي',   status:'paid'    },
-    { id:'I007', studentId:'S003', num:2, amount:300, dueDate:'2024-04-01', paidDate:'',           method:'',       status:'pending' },
-    { id:'I008', studentId:'S003', num:3, amount:300, dueDate:'2024-06-01', paidDate:'',           method:'',       status:'pending' }
-  ],
-  employees: [
-    { id:'E001', name:'سلمى أحمد الرشيدي',  role:'معلمة KG1',    branch:'esh', nationality:'كويتية', phone:'96560001', idNo:'281010001', salary:450, allowance:50,  contractStart:'2022-09-01', contractEnd:'2026-08-31', contractType:'دوام كامل', annualLeave:30, status:'active'  },
-    { id:'E002', name:'منيرة خالد العتيبي', role:'معلمة حضانة',  branch:'mat', nationality:'مصرية',  phone:'96560002', idNo:'',          salary:400, allowance:30,  contractStart:'2023-01-15', contractEnd:'2025-06-14', contractType:'دوام كامل', annualLeave:21, status:'active'  },
-    { id:'E003', name:'نوف سعد المطيري',    role:'مشرفة',         branch:'sol', nationality:'كويتية', phone:'96560003', idNo:'289050012', salary:500, allowance:80,  contractStart:'2021-09-01', contractEnd:'2025-08-31', contractType:'دوام كامل', annualLeave:30, status:'leave'   },
-    { id:'E004', name:'هدى عبدالله الشمري', role:'معلمة KG2',    branch:'esh', nationality:'كويتية', phone:'96560004', idNo:'290030045', salary:450, allowance:50,  contractStart:'2023-09-01', contractEnd:'2026-08-31', contractType:'دوام كامل', annualLeave:30, status:'active'  },
-    { id:'E005', name:'فاطمة علي الكندري',  role:'إدارية',        branch:'esh', nationality:'كويتية', phone:'96560005', idNo:'285070033', salary:380, allowance:20,  contractStart:'2020-06-01', contractEnd:'2025-05-31', contractType:'دوام كامل', annualLeave:30, status:'active'  },
-    { id:'E006', name:'ريم محمد العنزي',    role:'معلمة KG1',    branch:'sol', nationality:'كويتية', phone:'96560006', idNo:'292010067', salary:450, allowance:50,  contractStart:'2023-09-01', contractEnd:'2026-08-31', contractType:'دوام كامل', annualLeave:30, status:'active'  },
-    { id:'E007', name:'أمل سعيد الهاجري',  role:'معلمة حضانة',  branch:'mat', nationality:'أردنية', phone:'96560007', idNo:'',          salary:380, allowance:30,  contractStart:'2024-01-01', contractEnd:'2025-12-31', contractType:'مؤقت',      annualLeave:14, status:'active'  },
-    { id:'E008', name:'دانة فهد الرشيد',   role:'محاسبة',        branch:'esh', nationality:'كويتية', phone:'96560008', idNo:'288040091', salary:550, allowance:60,  contractStart:'2021-03-01', contractEnd:'2026-02-28', contractType:'دوام كامل', annualLeave:30, status:'active'  }
-  ],
-  leaves: [
-    { id:'L001', empId:'E001', empName:'سلمى أحمد الرشيدي',  branch:'esh', type:'سنوية',  from:'2025-02-01', to:'2025-02-10', days:10, status:'pending' },
-    { id:'L002', empId:'E002', empName:'منيرة خالد العتيبي', branch:'mat', type:'مرضية',  from:'2025-01-18', to:'2025-01-20', days:3,  status:'approved'},
-    { id:'L003', empId:'E003', empName:'نوف سعد المطيري',    branch:'sol', type:'أمومة',  from:'2025-01-10', to:'2025-04-10', days:90, status:'approved'}
-  ],
-  supplies: [
-    { id:'P001', name:'صابون يدين',    unit:'علبة',  branch:'esh', qty:8,  receiveDate:'2024-11-01', expiryDate:'2025-06-01' },
-    { id:'P002', name:'مناديل',        unit:'كرتون', branch:'sol', qty:20, receiveDate:'2024-12-15', expiryDate:'2025-12-15' },
-    { id:'P003', name:'معقم يدين',     unit:'زجاجة', branch:'mat', qty:3,  receiveDate:'2024-12-20', expiryDate:'2025-03-20' },
-    { id:'P004', name:'بالونات تزيين', unit:'علبة',  branch:'esh', qty:15, receiveDate:'2025-01-01', expiryDate:'2026-01-01' }
-  ],
-  clothes: [
-    { id:'C001', name:'تيشيرت صيفي', size:'3 سنوات', branch:'esh', qty:12, minQty:5  },
-    { id:'C002', name:'بنطلون',      size:'4 سنوات', branch:'mat', qty:5,  minQty:10 },
-    { id:'C003', name:'جاكيت شتوي', size:'5 سنوات', branch:'sol', qty:8,  minQty:5  }
-  ],
-  licenses: [
-    { id:'LC001', name:'ترخيص فرع الصليبخات التجاري', authority:'وزارة التجارة', licNo:'KW-2021-0445', branch:'sol', issueDate:'2022-02-15', expiryDate:'2025-02-15' },
-    { id:'LC002', name:'ترخيص فرع اشبيلية التعليمي',  authority:'وزارة التربية', licNo:'MOE-2023-1120', branch:'esh', issueDate:'2023-09-01', expiryDate:'2026-08-31' },
-    { id:'LC003', name:'ترخيص الصحة — المطلاع',       authority:'وزارة الصحة',   licNo:'MOH-2022-0078', branch:'mat', issueDate:'2022-01-10', expiryDate:'2025-01-10' }
-  ]
-};
+// ============================================================
+// LOCAL CACHE — same structure as before
+// ============================================================
+const CACHE = {};
 
 // ============================================================
-// DB object — read / write localStorage
+// SUPABASE REST helper
 // ============================================================
-const DB = {
-  _key: k => 'nursery4_' + k,
-
-  get(key) {
-    try { return JSON.parse(localStorage.getItem(this._key(key))); } catch { return null; }
+const SB = {
+  headers() {
+    return {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    };
   },
 
-  set(key, val) {
-    localStorage.setItem(this._key(key), JSON.stringify(val));
-  },
-
-  // Read a collection
-  all(key) { return this.get(key) || []; },
-
-  // Save whole collection
-  save(key, arr) { this.set(key, arr); },
-
-  // Add item (push + save)
-  add(key, item) {
-    const arr = this.all(key);
-    arr.push(item);
-    this.save(key, arr);
-  },
-
-  // Update item by id
-  update(key, id, changes) {
-    const arr = this.all(key).map(i => i.id === id ? Object.assign({}, i, changes) : i);
-    this.save(key, arr);
-  },
-
-  // Delete item by id
-  remove(key, id) {
-    this.save(key, this.all(key).filter(i => i.id !== id));
-  },
-
-  // Generate next id: prefix + zero-padded number
-  nextId(key, prefix) {
-    const arr = this.all(key);
-    const nums = arr.map(i => parseInt(i.id.replace(prefix,'')) || 0);
-    const next = nums.length ? Math.max(...nums) + 1 : 1;
-    return prefix + String(next).padStart(3, '0');
-  },
-
-  // Load seed data only if collection is empty
-  init() {
-    Object.entries(SEED).forEach(([key, data]) => {
-      if (!this.get(key)) this.save(key, data);
+  async get(table, query = '') {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      headers: this.headers()
     });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
   },
 
-  // Wipe everything (for dev/reset)
-  reset() {
-    Object.keys(SEED).forEach(k => localStorage.removeItem(this._key(k)));
-    this.init();
+  async post(table, body) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST', headers: this.headers(), body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+
+  async patch(table, query, body) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      method: 'PATCH', headers: this.headers(), body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(await r.text());
+  },
+
+  async delete(table, query) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      method: 'DELETE', headers: this.headers()
+    });
+    if (!r.ok) throw new Error(await r.text());
   }
 };
 
 // ============================================================
-// Helpers
+// COLUMN MAP — camelCase JS ↔ snake_case DB
+// ============================================================
+const TO_SNAKE = {
+  studentId:'student_id', empId:'emp_id', empName:'emp_name',
+  dueDate:'due_date', paidDate:'paid_date', startDate:'start_date',
+  fromDate:'from_date', toDate:'to_date', contractStart:'contract_start',
+  contractEnd:'contract_end', contractType:'contract_type',
+  annualLeave:'annual_leave', receiveDate:'receive_date',
+  expiryDate:'expiry_date', issueDate:'issue_date',
+  minQty:'min_qty', idNo:'id_no', lastLogin:'last_login',
+  phone1:'phone1', phone2:'phone2'
+};
+
+const TO_CAMEL = Object.fromEntries(Object.entries(TO_SNAKE).map(([k,v])=>[v,k]));
+
+function toSnake(obj) {
+  const out = {};
+  for (const [k,v] of Object.entries(obj)) out[TO_SNAKE[k]||k] = v;
+  return out;
+}
+
+function toCamel(obj) {
+  const out = {};
+  for (const [k,v] of Object.entries(obj)) out[TO_CAMEL[k]||k] = v;
+  return out;
+}
+
+// ============================================================
+// TABLE MAP
+// ============================================================
+const TABLES = {
+  users:'users', students:'students', installments:'installments',
+  employees:'employees', leaves:'leaves', supplies:'supplies',
+  clothes:'clothes', licenses:'licenses'
+};
+
+// ============================================================
+// DB — synchronous interface backed by cache + async Supabase
+// ============================================================
+const DB = {
+
+  // Read from cache (sync)
+  all(key) {
+    return (CACHE[key] || []).map(toCamel);
+  },
+
+  // Read single setting (sync)
+  get(key) {
+    return CACHE['setting_' + key] ?? null;
+  },
+
+  // Save setting
+  set(key, val) {
+    CACHE['setting_' + key] = val;
+    // persist to localStorage as backup
+    try { localStorage.setItem('pk_setting_' + key, JSON.stringify(val)); } catch(e) {}
+    // fire-and-forget to Supabase
+    SB.post('settings', { key, value: val })
+      .catch(() => SB.patch('settings', 'key=eq.' + key, { value: val }).catch(()=>{}));
+  },
+
+  // Add item
+  add(key, item) {
+    const row = toSnake(item);
+    CACHE[key] = CACHE[key] || [];
+    CACHE[key].push(row);
+    // fire-and-forget
+    SB.post(TABLES[key] || key, row).catch(e => console.warn('SB.add error:', e));
+  },
+
+  // Update item by id
+  update(key, id, changes) {
+    const row = toSnake(changes);
+    CACHE[key] = (CACHE[key] || []).map(i => i.id === id ? {...i, ...row} : i);
+    SB.patch(TABLES[key] || key, 'id=eq.' + id, row).catch(e => console.warn('SB.update error:', e));
+  },
+
+  // Remove item by id
+  remove(key, id) {
+    CACHE[key] = (CACHE[key] || []).filter(i => i.id !== id);
+    SB.delete(TABLES[key] || key, 'id=eq.' + id).catch(e => console.warn('SB.remove error:', e));
+  },
+
+  // Save whole collection (used by legacy code)
+  save(key, arr) {
+    CACHE[key] = arr.map(toSnake);
+  },
+
+  // Generate next id
+  nextId(key, prefix) {
+    const arr = CACHE[key] || [];
+    const nums = arr.map(i => parseInt((i.id||'').replace(prefix,''))||0);
+    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    return prefix + String(next).padStart(3, '0');
+  },
+
+  // Load all data from Supabase into cache, then boot app
+  async init() {
+    try {
+      showLoadingScreen(true);
+
+      // Load all tables in parallel
+      const keys = Object.keys(TABLES);
+      const results = await Promise.all(
+        keys.map(k => SB.get(TABLES[k], 'order=id').catch(() => []))
+      );
+      keys.forEach((k, i) => { CACHE[k] = results[i] || []; });
+
+      // Load settings
+      const settings = await SB.get('settings').catch(() => []);
+      settings.forEach(s => { CACHE['setting_' + s.key] = s.value; });
+
+      // If no users yet, seed demo data
+      if (!CACHE.users || !CACHE.users.length) {
+        await seedDemoData();
+      }
+
+      console.log('✅ Supabase loaded:', keys.map(k => `${k}:${CACHE[k].length}`).join(', '));
+      showLoadingScreen(false);
+
+    } catch(e) {
+      console.error('Supabase error:', e);
+      // fallback to localStorage
+      fallbackToLocalStorage();
+      showLoadingScreen(false);
+    }
+  },
+
+  reset() {
+    if (!confirm('تحذير: سيتم حذف جميع البيانات!')) return;
+    if (!confirm('تأكيد نهائي: سيتم حذف كل شيء!')) return;
+    Object.keys(TABLES).forEach(k => {
+      CACHE[k] = [];
+      SB.delete(TABLES[k], 'id=neq.x').catch(()=>{});
+    });
+    showToast('✅ تم المسح — جارٍ إعادة التحميل...');
+    setTimeout(() => location.reload(), 1500);
+  }
+};
+
+// ============================================================
+// LOADING SCREEN
+// ============================================================
+function showLoadingScreen(show) {
+  let el = document.getElementById('loadingScreen');
+  if (show && !el) {
+    el = document.createElement('div');
+    el.id = 'loadingScreen';
+    el.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#1a5c42,#2ecc8f);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:inherit';
+    el.innerHTML = '<div style="font-size:48px;margin-bottom:16px">🌟</div><h2 style="margin:0 0 8px">Personality Kids</h2><p style="margin:0;opacity:.8">جارٍ تحميل البيانات...</p><div style="margin-top:20px;width:200px;height:4px;background:rgba(255,255,255,.3);border-radius:2px"><div id="loadBar" style="height:100%;background:#fff;border-radius:2px;width:0;transition:width 2s"></div></div>';
+    document.body.appendChild(el);
+    setTimeout(() => { const b = document.getElementById('loadBar'); if(b) b.style.width='90%'; }, 100);
+  } else if (!show && el) {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity .4s';
+    setTimeout(() => el.remove(), 400);
+  }
+}
+
+// ============================================================
+// SEED DEMO DATA
+// ============================================================
+async function seedDemoData() {
+  const seed = {
+    users: [
+      { id:'admin', name:'المدير العام',     branch:'all', avatar:'م', pin:'1234', role:'admin',      last_login:'' },
+      { id:'esh',   name:'مشرفة اشبيلية',   branch:'esh', avatar:'ش', pin:'1234', role:'supervisor', last_login:'' },
+      { id:'sol',   name:'مشرفة الصليبخات', branch:'sol', avatar:'ص', pin:'1234', role:'supervisor', last_login:'' },
+      { id:'mat',   name:'مشرفة المطلاع',   branch:'mat', avatar:'م', pin:'1234', role:'supervisor', last_login:'' }
+    ],
+    students: [
+      { id:'S001', name:'أحمد محمد الرشيد',  branch:'esh', grade:'KG1',     phone1:'96550001', phone2:'96550002', dob:'2020-03-15', start_date:'2023-09-01', fees:1200, discount:0, net:1200, paid:900  },
+      { id:'S002', name:'سارة علي الكندري',  branch:'sol', grade:'KG2',     phone1:'96550003', phone2:'',         dob:'2019-07-22', start_date:'2023-09-01', fees:1200, discount:0, net:1200, paid:1200 },
+      { id:'S003', name:'فهد ناصر العازمي',  branch:'mat', grade:'nursery', phone1:'96550005', phone2:'96550006', dob:'2021-01-10', start_date:'2024-01-01', fees:900,  discount:0, net:900,  paid:300  }
+    ]
+  };
+
+  for (const [table, rows] of Object.entries(seed)) {
+    for (const row of rows) {
+      await SB.post(table, row).catch(() => {});
+    }
+    CACHE[table] = rows;
+  }
+}
+
+// ============================================================
+// FALLBACK — localStorage if Supabase fails
+// ============================================================
+function fallbackToLocalStorage() {
+  console.warn('⚠️ Using localStorage fallback');
+  const SEED = {
+    users: [
+      { id:'admin', name:'المدير العام',     branch:'all', avatar:'م', pin:'1234', role:'admin',      lastLogin:'' },
+      { id:'esh',   name:'مشرفة اشبيلية',   branch:'esh', avatar:'ش', pin:'1234', role:'supervisor', lastLogin:'' },
+      { id:'sol',   name:'مشرفة الصليبخات', branch:'sol', avatar:'ص', pin:'1234', role:'supervisor', lastLogin:'' },
+      { id:'mat',   name:'مشرفة المطلاع',   branch:'mat', avatar:'م', pin:'1234', role:'supervisor', lastLogin:'' }
+    ],
+    students:[], installments:[], employees:[], leaves:[],
+    supplies:[], clothes:[], licenses:[]
+  };
+  Object.entries(SEED).forEach(([k, def]) => {
+    const raw = localStorage.getItem('nursery4_' + k);
+    CACHE[k] = raw ? JSON.parse(raw).map(toSnake) : def.map(toSnake);
+  });
+
+  // Override DB methods to also write to localStorage
+  const origAdd    = DB.add.bind(DB);
+  const origUpdate = DB.update.bind(DB);
+  const origRemove = DB.remove.bind(DB);
+  const origSave   = DB.save.bind(DB);
+
+  DB.add = function(key, item) {
+    origAdd(key, item);
+    localStorage.setItem('nursery4_' + key, JSON.stringify(CACHE[key]));
+  };
+  DB.update = function(key, id, changes) {
+    origUpdate(key, id, changes);
+    localStorage.setItem('nursery4_' + key, JSON.stringify(CACHE[key]));
+  };
+  DB.remove = function(key, id) {
+    origRemove(key, id);
+    localStorage.setItem('nursery4_' + key, JSON.stringify(CACHE[key]));
+  };
+  DB.save = function(key, arr) {
+    origSave(key, arr);
+    localStorage.setItem('nursery4_' + key, JSON.stringify(CACHE[key]));
+  };
+}
+
+// ============================================================
+// HELPERS
 // ============================================================
 function daysUntil(dateStr) {
   if (!dateStr) return 9999;
   return Math.round((new Date(dateStr) - new Date()) / 86400000);
 }
-
 function fmtDate(dateStr) {
   if (!dateStr) return '—';
   return dateStr.replace(/-/g, '/');
 }
-
 function fmtKD(num) {
   return parseFloat(num || 0).toFixed(3) + ' د.ك';
 }
-
 function studentStatus(s) {
-  const remaining = s.net - s.paid;
-  if (remaining <= 0)   return { label:'مكتمل', cls:'badge-green' };
-  if (s.paid === 0)     return { label:'لم يُسدَّد', cls:'badge-red' };
-  return                       { label:'جزئي',   cls:'badge-orange' };
+  const rem = s.net - s.paid;
+  if (rem <= 0)    return { label:'مكتمل',      cls:'badge-green'  };
+  if (s.paid === 0) return { label:'لم يُسدَّد', cls:'badge-red'    };
+  return                   { label:'جزئي',        cls:'badge-orange' };
 }
-
 function empStatus(e) {
-  if (e.status === 'active') return { label:'نشط',    cls:'badge-green' };
-  if (e.status === 'leave')  return { label:'إجازة',  cls:'badge-blue'  };
-  return                            { label:'غير نشط',cls:'badge-red'   };
+  if (e.status === 'active') return { label:'نشط',     cls:'badge-green' };
+  if (e.status === 'leave')  return { label:'إجازة',   cls:'badge-blue'  };
+  return                            { label:'غير نشط', cls:'badge-red'   };
 }
-
 function licenseStatus(l) {
-  const d = daysUntil(l.expiryDate);
-  if (d < 0)   return { label:'منتهي',        cls:'badge-red',    card:'lc-danger'  };
-  if (d < 60)  return { label:'ينتهي قريباً', cls:'badge-orange', card:'lc-warning' };
-  return               { label:'ساري',         cls:'badge-green',  card:'lc-good'    };
+  const d = daysUntil(l.expiryDate || l.expiry_date);
+  if (d < 0)  return { label:'منتهي',        cls:'badge-red',    card:'lc-danger'  };
+  if (d < 60) return { label:'ينتهي قريباً', cls:'badge-orange', card:'lc-warning' };
+  return              { label:'ساري',         cls:'badge-green',  card:'lc-good'    };
 }
