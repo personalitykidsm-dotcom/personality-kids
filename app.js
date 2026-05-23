@@ -441,8 +441,8 @@ document.addEventListener('keydown', e => {
 // ============================================================
 // STUBS — filled in next parts
 // ============================================================
-function openAddStudent()          { showToast('جارٍ تحميل النموذج...'); }
-function openEditStudent(id)       { showToast('تعديل: ' + id); }
+// openAddStudent defined in app-students.js
+// openEditStudent defined in app-students.js
 
 function deleteStudent(id, name) {
   if (!confirm('هل تريد حذف الطالب "' + name + '"؟\nسيتم حذف جميع أقساطه أيضاً.')) return;
@@ -452,8 +452,8 @@ function deleteStudent(id, name) {
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }
-function openStudentInstallments(id){ showToast('أقساط: ' + id); }
-function exportStudentsExcel()     { showToast('Excel جارٍ التصدير...'); }
+// openStudentInstallments defined in app-students.js
+// exportStudentsExcel defined in app-students.js
 function renderFees()    {}
 function renderReports() {}
 function renderClothes() {}
