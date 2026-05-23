@@ -35,7 +35,7 @@ function openAddStudent() {
           </div>
           <div class="form-group">
             <label>الفرع *</label>
-            <select id="sBranch">
+            <select id="sBranch" ${currentUser && currentUser.role !== 'admin' ? 'disabled style="background:#f5f5f5;opacity:0.8"' : ''}>
               <option value="esh">اشبيلية</option>
               <option value="sol">الصليبخات</option>
               <option value="mat">المطلاع</option>
@@ -171,7 +171,8 @@ function openAddStudent() {
 
   // set branch from current filter
   if (currentBranch !== 'all') {
-    document.getElementById('sBranch').value = currentBranch;
+    const _br = (currentUser && currentUser.role !== 'admin') ? currentUser.branch : currentBranch;
+  document.getElementById('sBranch').value = _br !== 'all' ? _br : 'esh';
   }
 }
 
