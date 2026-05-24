@@ -34,6 +34,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================
+// GRADES HELPER
+// ============================================================
+const GRADES_DEFAULT = [
+  { id:'nursery', label:'حضانة (2-3 سنوات)' },
+  { id:'KG1',     label:'KG1 (3-4 سنوات)'  },
+  { id:'KG2',     label:'KG2 (4-5 سنوات)'  }
+];
+
+function getGrades() {
+  return DB.get('appGrades') || GRADES_DEFAULT;
+}
+
+function saveGrades(arr) {
+  DB.set('appGrades', arr);
+}
+
+// ============================================================
 // LOGIN
 // ============================================================
 function initLogin() {
@@ -362,8 +379,9 @@ function renderStudentsTable(grade) {
   let list = filterByBranch(DB.all('students'));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
 
-  const gradeLabel = { nursery:'حضانة', KG1:'KG1', KG2:'KG2' };
-  const gradeBadge = { nursery:'badge-green', KG1:'badge-blue', KG2:'badge-purple' };
+  const grades     = getGrades();
+  const gradeLabel = Object.fromEntries(grades.map(g=>[g.id, g.label]));
+  const gradeBadge = Object.fromEntries(grades.map((g,i)=>[g.id, ['badge-green','badge-blue','badge-purple','badge-orange','badge-gray'][i%5]]));
 
   const rows = list.map(s => {
     const st  = studentStatus(s);

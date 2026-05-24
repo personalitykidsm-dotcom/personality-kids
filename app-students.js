@@ -28,9 +28,7 @@ function openAddStudent() {
           <div class="form-group">
             <label>المرحلة *</label>
             <select id="sGrade">
-              <option value="nursery">حضانة (2-3 سنوات)</option>
-              <option value="KG1">KG1 (3-4 سنوات)</option>
-              <option value="KG2">KG2 (4-5 سنوات)</option>
+              ${getGrades().map(g=>`<option value="${g.id}">${g.label}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -169,24 +167,9 @@ function openAddStudent() {
   document.getElementById('instStart').value = new Date().toISOString().split('T')[0];
   document.getElementById('sStart').value    = new Date().toISOString().split('T')[0];
 
-  // set branch + lock for supervisors
-  const _br = (currentUser && currentUser.role !== 'admin')
-    ? currentUser.branch
-    : (currentBranch !== 'all' ? currentBranch : 'esh');
-  document.getElementById('sBranch').value = _br;
-
-  // lock branch selector for supervisors
-  const branchSel = document.getElementById('sBranch');
-  if (currentUser && currentUser.role !== 'admin') {
-    branchSel.disabled = true;
-    branchSel.style.background = '#f0f0f0';
-    branchSel.style.opacity = '0.8';
-    branchSel.style.cursor = 'not-allowed';
-  } else {
-    branchSel.disabled = false;
-    branchSel.style.background = '';
-    branchSel.style.opacity = '';
-    branchSel.style.cursor = '';
+  // set branch from current filter
+  if (currentBranch !== 'all') {
+    document.getElementById('sBranch').value = currentBranch;
   }
 }
 

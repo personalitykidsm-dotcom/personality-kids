@@ -24,6 +24,7 @@ function renderSettings() {
       <button class="tab-btn active" onclick="settTab('users',this)">👤 المستخدمون</button>
       <button class="tab-btn" onclick="settTab('perms',this)">🔑 الصلاحيات</button>
       <button class="tab-btn" onclick="settTab('nursery',this)">🏫 إعدادات الروضة</button>
+      <button class="tab-btn" onclick="settTab('grades',this)">🎓 المراحل الدراسية</button>
       <button class="tab-btn" onclick="settTab('data',this)">💾 البيانات</button>
     </div>
     <div id="settContent"></div>
@@ -273,6 +274,88 @@ function saveNurserySettings() {
 }
 
 // ── DATA TAB ───────────────────────────────────────────────
+function renderGradesTab(cont) {
+  const grades = getGrades();
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-title">🎓 إدارة المراحل الدراسية</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+        أضف أو عدّل أو احذف المراحل الدراسية — ستظهر في فورم إضافة الطالب وفي جداول الصرف
+      </p>
+
+      <div id="gradesList" style="margin-bottom:20px">
+        ${renderGradesRows(grades)}
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:14px;background:var(--bg-secondary,#f7f7f5);border-radius:10px">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px">
+          <label>الكود (بالانجليزي)</label>
+          <input id="newGradeId" class="form-control" placeholder="مثال: KG3">
+        </div>
+        <div class="form-group" style="margin:0;flex:2;min-width:180px">
+          <label>الاسم المعروض</label>
+          <input id="newGradeLabel" class="form-control" placeholder="مثال: KG3 (5-6 سنوات)">
+        </div>
+        <button class="btn btn-primary" onclick="addGrade()">➕ إضافة مرحلة</button>
+      </div>
+    </div>`;
+}
+
+function renderGradesRows(grades) {
+  if (!grades.length) return '<p style="color:var(--text-muted)">لا توجد مراحل</p>';
+  return `<table style="width:100%">
+    <thead><tr><th>الكود</th><th>الاسم المعروض</th><th>إجراءات</th></tr></thead>
+    <tbody>
+      ${grades.map((g,i) => `<tr>
+        <td><code style="background:var(--bg-secondary);padding:3px 8px;border-radius:6px">${g.id}</code></td>
+        <td>
+          <input class="form-control" id="glabel-${i}" value="${g.label}"
+            style="max-width:260px" onchange="updateGradeLabel(${i}, this.value)">
+        </td>
+        <td>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger)"
+            onclick="deleteGrade(${i})">🗑️ حذف</button>
+        </td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function updateGradeLabel(idx, newLabel) {
+  const grades = getGrades();
+  if (grades[idx]) {
+    grades[idx].label = newLabel;
+    saveGrades(grades);
+    showToast('✅ تم تحديث المرحلة');
+  }
+}
+
+function addGrade() {
+  const id    = document.getElementById('newGradeId').value.trim().replace(/\s+/g,'');
+  const label = document.getElementById('newGradeLabel').value.trim();
+  if (!id || !label) { showToast('⚠️ أدخل الكود والاسم'); return; }
+  const grades = getGrades();
+  if (grades.find(g => g.id === id)) { showToast('⚠️ هذا الكود موجود بالفعل'); return; }
+  grades.push({ id, label });
+  saveGrades(grades);
+  showToast('✅ تمت إضافة المرحلة: ' + label);
+  // Re-render
+  const cont = document.getElementById('settContent');
+  if (cont) renderGradesTab(cont);
+}
+
+function deleteGrade(idx) {
+  const grades = getGrades();
+  const g = grades[idx];
+  if (!g) return;
+  if (!confirm(`هل تريد حذف المرحلة "${g.label}"؟`)) return;
+  grades.splice(idx, 1);
+  saveGrades(grades);
+  showToast('🗑️ تم حذف المرحلة');
+  const cont = document.getElementById('settContent');
+  if (cont) renderGradesTab(cont);
+}
+
 function renderDataTab(cont) {
   const students   = DB.all('students').length;
   const employees  = DB.all('employees').length;
