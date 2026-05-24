@@ -456,7 +456,8 @@ function deleteStudent(id, name) {
 // exportStudentsExcel defined in app-students.js
 function renderFees()    {}
 function renderReports() {}
-// renderClothes and renderSupplies defined in app-reports.js
+function renderClothes() {}
+function renderSupplies(){}
 function renderMessages(){}
 function renderAutoreply(){}
 function renderHR()      {}
