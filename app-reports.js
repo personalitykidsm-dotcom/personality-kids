@@ -408,13 +408,9 @@ function pkBuildMainStock() {
       </td></tr>`;
   }).join('');
   return `<div style="${pks}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <b style="font-size:14px">🏭 المخزن الرئيسي</b>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="pkExportMainExcel()">📥 Excel</button>
-        <button class="btn btn-outline btn-sm" onclick="pkPrintMainReport()">🖨️ PDF</button>
-        <button class="btn btn-primary btn-sm" onclick="pkOpenAddType()">➕ نوع جديد</button>
-      </div>
+      <button class="btn btn-primary btn-sm" onclick="pkOpenAddType()">➕ نوع جديد</button>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>النوع</th><th>الكمية</th><th>الحد الأدنى</th><th>الحالة</th><th>إضافة كمية</th></tr></thead>
@@ -472,30 +468,9 @@ function pkSaveNewType() {
 }
 
 // Admin: Branch stocks
-function pkExportMainExcel() {
-  const data = invGetMainStock().map(i => ({
-    'النوع': i.type,
-    'الكمية': i.qty,
-    'الحد الأدنى': INV_MIN_QTY,
-    'الحالة': i.qty < INV_MIN_QTY ? 'منخفض' : i.qty < INV_MIN_QTY*2 ? 'متوسط' : 'جيد'
-  }));
-  xlsxExport(data, 'المخزن_الرئيسي_ملابس');
-}
-function pkPrintMainReport() {
-  const rows = invGetMainStock().map(i => [
-    i.type, i.qty, INV_MIN_QTY,
-    i.qty < INV_MIN_QTY ? 'منخفض' : i.qty < INV_MIN_QTY*2 ? 'متوسط' : 'جيد'
-  ]);
-  printReport('تقرير المخزن الرئيسي — ملابس', ['النوع','الكمية','الحد الأدنى','الحالة'], rows);
-}
-
 function pkBuildBranches() {
   const stock = invGetBranchStock();
-  const exportBtns = `<div style="display:flex;gap:6px;margin-bottom:14px">
-    <button class="btn btn-outline btn-sm" onclick="pkExportBranchesExcel()">📥 Excel</button>
-    <button class="btn btn-outline btn-sm" onclick="pkPrintBranchesReport()">🖨️ PDF</button>
-  </div>`;
-  const branchCards = ['esh','sol','mat'].map(b => {
+  return ['esh','sol','mat'].map(b => {
     const bStock = stock.filter(x=>x.branch===b);
     const tot = bStock.reduce((s,i)=>s+i.qty,0);
     const rows = bStock.map(i => {
@@ -509,7 +484,6 @@ function pkBuildBranches() {
         <tbody>${rows}</tbody>
       </table></div></div>`;
   }).join('');
-  return exportBtns + branchCards;
 }
 
 function pkTransferToBranch(branch, type) {
@@ -529,28 +503,6 @@ function pkTransferToBranch(branch, type) {
 }
 
 // Admin: Requests
-function pkExportBranchesExcel() {
-  const branch = invGetBranchStock();
-  const data = branch.map(i => ({
-    'النوع': i.type,
-    'الفرع': BRANCHES[i.branch]?.name || i.branch,
-    'الكمية': i.qty,
-    'الحد الأدنى': i.minQty || INV_MIN_QTY,
-    'الحالة': i.qty < (i.minQty||INV_MIN_QTY) ? 'منخفض' : 'كافي'
-  }));
-  xlsxExport(data, 'أرصدة_الفروع_ملابس');
-}
-function pkPrintBranchesReport() {
-  const branch = invGetBranchStock();
-  const rows = branch.map(i => [
-    i.type, BRANCHES[i.branch]?.name||i.branch, i.qty,
-    i.minQty||INV_MIN_QTY,
-    i.qty < (i.minQty||INV_MIN_QTY) ? 'منخفض' : 'كافي'
-  ]);
-  printReport('تقرير أرصدة الفروع — ملابس',
-    ['النوع','الفرع','الكمية','الحد الأدنى','الحالة'], rows);
-}
-
 function pkBuildRequests() {
   const reqs = invGetRequests();
   const rows = reqs.length
@@ -565,30 +517,11 @@ function pkBuildRequests() {
           <td>${st}</td><td>${act}</td></tr>`;
       }).join('')
     : `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد طلبات</td></tr>`;
-  const reqs2 = invGetRequests();
-  const reqExcelData = reqs2.map(r=>({'الرقم':r.id,'الفرع':BRANCHES[r.branch]?.name||r.branch,'النوع':r.type,'الكمية':r.qty,'التاريخ':fmtDate(r.date),'الحالة':r.status==='approved'?'موافق':r.status==='rejected'?'مرفوض':'انتظار'}));
-  return `<div style="${pks}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <b style="font-size:14px">📋 طلبات التزويد من الفروع</b>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="xlsxExport(${JSON.stringify(reqExcelData).replace(/'/g,'\\'')},'طلبات_التزويد')">📥 Excel</button>
-        <button class="btn btn-outline btn-sm" onclick="pkPrintRequestsReport()">🖨️ PDF</button>
-      </div>
-    </div>
-    <div class="table-wrap"><table>
+  return `<div style="${pks}"><b style="font-size:14px">📋 طلبات التزويد من الفروع</b>
+    <div class="table-wrap" style="margin-top:12px"><table>
       <thead><tr><th>رقم</th><th>الفرع</th><th>النوع</th><th>الكمية</th><th>التاريخ</th><th>الحالة</th><th>إجراء</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
-}
-
-function pkPrintRequestsReport() {
-  const rows = invGetRequests().map(r => [
-    r.id, BRANCHES[r.branch]?.name||r.branch, r.type, r.qty,
-    fmtDate(r.date),
-    r.status==='approved'?'موافق':r.status==='rejected'?'مرفوض':'انتظار'
-  ]);
-  printReport('تقرير طلبات التزويد — ملابس',
-    ['الرقم','الفرع','النوع','الكمية','التاريخ','الحالة'], rows);
 }
 
 function pkApproveReq(id) {
@@ -620,32 +553,6 @@ function pkRejectReq(id) {
 }
 
 // Admin: Dispatch log
-function pkExportLogExcel(branch) {
-  let log = invGetDispatch();
-  if (branch) log = log.filter(d => d.branch === branch);
-  const data = log.map(d => ({
-    'اسم الطفل': d.childName||'—',
-    'المرحلة':   d.stage||d.grade||'—',
-    'النوع':     d.type,
-    'المقاس':    d.size||'—',
-    'الكمية':    d.qty,
-    'الفرع':     BRANCHES[d.branch]?.name||d.branch,
-    'التاريخ':   d.date||'—'
-  }));
-  xlsxExport(data, 'سجل_صرف_الملابس');
-}
-function pkPrintLogReport(branch) {
-  let log = invGetDispatch();
-  if (branch) log = log.filter(d => d.branch === branch);
-  const rows = log.map(d => [
-    d.childName||'—', d.stage||d.grade||'—', d.type,
-    d.size||'—', d.qty,
-    BRANCHES[d.branch]?.name||d.branch, d.date||'—'
-  ]);
-  printReport('سجل صرف الملابس',
-    ['اسم الطفل','المرحلة','النوع','المقاس','الكمية','الفرع','التاريخ'], rows);
-}
-
 function pkBuildLog(branch) {
   const log = invGetDispatch().filter(d=>!branch||d.branch===branch).slice().reverse();
   const rows = log.length
@@ -653,21 +560,13 @@ function pkBuildLog(branch) {
         <td>${fmtDate(d.date)}</td>
         <td>${BRANCHES[d.branch]?.name||d.branch}</td>
         <td><b>${d.childName}</b></td><td>${d.stage}</td>
-        <td>${d.type}</td><td>${d.size||'—'}</td><td>${d.qty}</td>
+        <td>${d.type}</td><td>${d.qty}</td>
       </tr>`).join('')
     : `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد سجلات</td></tr>`;
   const title = branch ? `سجل صرف فرع ${BRANCHES[branch]?.name}` : 'سجل الصرف — جميع الفروع';
-  const branchArg = branch ? `'${branch}'` : 'null';
-  return `<div style="${pks}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <b style="font-size:14px">📜 ${title}</b>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="pkExportLogExcel(${branchArg})">📥 Excel</button>
-        <button class="btn btn-outline btn-sm" onclick="pkPrintLogReport(${branchArg})">🖨️ PDF</button>
-      </div>
-    </div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>التاريخ</th><th>الفرع</th><th>اسم الطفل/ة</th><th>المرحلة</th><th>النوع</th><th>المقاس</th><th>الكمية</th></tr></thead>
+  return `<div style="${pks}"><b style="font-size:14px">📜 ${title}</b>
+    <div class="table-wrap" style="margin-top:12px"><table>
+      <thead><tr><th>التاريخ</th><th>الفرع</th><th>اسم الطفل/ة</th><th>المرحلة</th><th>النوع</th><th>الكمية</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
 }
@@ -705,31 +604,11 @@ function pkBuildBranchStock() {
     const st = i.qty<(i.minQty||INV_MIN_QTY)?pkDanger('نفذ تقريباً'):i.qty<15?pkWarn('منخفض'):pkOk('متاح');
     return `<tr><td><b>${i.type}</b></td><td>${i.qty}</td><td>${i.minQty||INV_MIN_QTY}</td><td>${st}</td></tr>`;
   }).join('');
-  return `<div style="${pks}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <b style="font-size:14px">📦 مخزون فرع ${invBranchName()} — إجمالي: ${tot} قطعة</b>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="pkExportBranchStockExcel()">📥 Excel</button>
-        <button class="btn btn-outline btn-sm" onclick="pkPrintBranchStockReport()">🖨️ PDF</button>
-      </div>
-    </div>
-    <div class="table-wrap"><table>
+  return `<div style="${pks}"><b style="font-size:14px">📦 مخزون فرع ${invBranchName()} — إجمالي: ${tot} قطعة</b>
+    <div class="table-wrap" style="margin-top:12px"><table>
       <thead><tr><th>النوع</th><th>الكمية</th><th>الحد الأدنى</th><th>الحالة</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
-}
-
-function pkExportBranchStockExcel() {
-  const b = invBranchKey();
-  const stock = invGetBranchStock().filter(x=>x.branch===b);
-  const data = stock.map(i=>({'النوع':i.type,'الكمية':i.qty,'الحد الأدنى':i.minQty||INV_MIN_QTY,'الحالة':i.qty<(i.minQty||INV_MIN_QTY)?'منخفض':'متاح'}));
-  xlsxExport(data, `مخزن_${invBranchName()}_ملابس`);
-}
-function pkPrintBranchStockReport() {
-  const b = invBranchKey();
-  const stock = invGetBranchStock().filter(x=>x.branch===b);
-  const rows = stock.map(i=>[i.type,i.qty,i.minQty||INV_MIN_QTY,i.qty<(i.minQty||INV_MIN_QTY)?'منخفض':'متاح']);
-  printReport(`مخزون ملابس فرع ${invBranchName()}`,['النوع','الكمية','الحد الأدنى','الحالة'],rows);
 }
 
 // Branch: Dispatch form
@@ -747,11 +626,6 @@ function pkBuildDispatchForm() {
         <select id="pkd-stage" class="form-control">${stageOpts}</select></div>
       <div class="form-group" style="margin:0"><label>نوع القطعة *</label>
         <select id="pkd-type" class="form-control">${typeOpts}</select></div>
-      <div class="form-group" style="margin:0"><label>المقاس</label>
-        <select id="pkd-size" class="form-control">
-          <option value="">— اختر —</option>
-          ${['2 سنوات','3 سنوات','4 سنوات','5 سنوات','6 سنوات','7 سنوات','8 سنوات'].map(s=>`<option>${s}</option>`).join('')}
-        </select></div>
       <div class="form-group" style="margin:0"><label>الكمية</label>
         <input id="pkd-qty" type="number" class="form-control" value="1" min="1"></div>
       <div class="form-group" style="margin:0"><label>التاريخ</label>
@@ -931,7 +805,6 @@ function supBuildInventory(branch) {
       ${branchSel}
       <button class="btn btn-primary" onclick="supOpenAdd('${branch}')">➕ إضافة صنف</button>
       <button class="btn btn-outline" onclick="supExportExcel('${branch}')">📥 Excel</button>
-      <button class="btn btn-outline" onclick="supPrintReport('${branch}')">🖨️ PDF</button>
     </div>
     <div class="card"><div class="table-wrap" id="supTableWrap">
       <table>
@@ -1094,31 +967,6 @@ function supSubmitDispatch() {
   showToast('✅ تم تسجيل الصرف');
 }
 
-function supExportLogExcel(branch) {
-  let log = supGetDispatchLog();
-  if (branch) log = log.filter(d => d.branch === branch);
-  const data = log.map(d => ({
-    'الصنف':    d.itemName||'—',
-    'الوحدة':   d.unit||'—',
-    'الكمية':   d.qty,
-    'الفرع':    BRANCHES[d.branch]?.name||d.branch,
-    'الغرض':    d.purpose||'—',
-    'التاريخ':  fmtDate(d.date)||'—'
-  }));
-  xlsxExport(data, 'سجل_صرف_المستهلكات');
-}
-function supPrintLogReport(branch) {
-  let log = supGetDispatchLog();
-  if (branch) log = log.filter(d => d.branch === branch);
-  const rows = log.map(d => [
-    d.itemName||'—', d.unit||'—', d.qty,
-    BRANCHES[d.branch]?.name||d.branch,
-    d.purpose||'—', fmtDate(d.date)||'—'
-  ]);
-  printReport('سجل صرف المستهلكات',
-    ['الصنف','الوحدة','الكمية','الفرع','الغرض','التاريخ'], rows);
-}
-
 function supBuildLog(branch) {
   const log = supGetDispatchLog().filter(d=>!branch||d.branch===branch).slice().reverse();
   const rows = log.length
@@ -1169,23 +1017,6 @@ function supSubmitReq() {
   const qty  = parseInt(document.getElementById('supreq-qty')?.value)||0;
   if (!name||qty<=0) { showToast('⚠️ أكمل الحقول المطلوبة'); return; }
   showToast(`✅ تم إرسال طلب: ${qty} ${document.getElementById('supreq-unit')?.value||''} من ${name}`);
-}
-
-function supPrintReport(branch) {
-  let list = DB.all('supplies');
-  if (branch !== 'all') list = list.filter(s => s.branch === branch);
-  const rows = list.map(s => {
-    const d = daysUntil(s.expiryDate);
-    return [
-      s.name, s.unit||'—',
-      BRANCHES[s.branch]?.name||s.branch,
-      s.qty, fmtDate(s.receiveDate)||'—',
-      fmtDate(s.expiryDate)||'—',
-      d<0?'منتهي':d<30?'ينتهي قريباً':'جيد'
-    ];
-  });
-  printReport('تقرير المستهلكات',
-    ['الصنف','الوحدة','الفرع','الكمية','تاريخ الاستلام','تاريخ الانتهاء','الحالة'], rows);
 }
 
 function supExportExcel(branch) {
