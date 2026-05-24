@@ -5,14 +5,16 @@
 // ============================================================
 // GRADES HELPERS (defined here to avoid dependency on app.js version)
 // ============================================================
-const GRADES_DEFAULT = [
-  { id:'nursery', label:'حضانة (2-3 سنوات)' },
-  { id:'KG1',     label:'KG1 (3-4 سنوات)'   },
-  { id:'KG2',     label:'KG2 (4-5 سنوات)'   }
-];
-
-function getGrades()       { return DB.get('appGrades') || GRADES_DEFAULT; }
-function saveGrades(arr)   { DB.set('appGrades', arr); }
+// getGrades/saveGrades — safe redeclaration
+if (typeof getGrades === 'undefined') {
+  window.GRADES_DEFAULT = [
+    { id:'nursery', label:'حضانة (2-3 سنوات)' },
+    { id:'KG1',     label:'KG1 (3-4 سنوات)'   },
+    { id:'KG2',     label:'KG2 (4-5 سنوات)'   }
+  ];
+  window.getGrades  = function() { return DB.get('appGrades') || window.GRADES_DEFAULT; };
+  window.saveGrades = function(arr) { DB.set('appGrades', arr); };
+}
 
 // ============================================================
 function renderSettings() {
