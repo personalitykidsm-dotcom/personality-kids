@@ -414,10 +414,13 @@ function pkBuildMainStock() {
     const st = i.qty<INV_MIN_QTY?pkDanger('منخفض'):i.qty<INV_MIN_QTY*2?pkWarn('متوسط'):pkOk('جيد');
     return `<tr>
       <td><b>${i.type}</b></td><td>${i.qty}</td><td>${INV_MIN_QTY}</td><td>${st}</td>
-      <td><input type="number" id="pkaq-${i.type}" value="10" min="1"
-        style="width:65px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
+      <td>
+        <input type="number" id="pkaq-${i.type}" value="10" min="1"
+          style="width:65px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
         <button onclick="pkAddToMain('${i.type}')"
           style="padding:5px 10px;font-size:12px;border:1px solid var(--primary);background:var(--primary-light,#e8f5ee);color:var(--primary-dark);border-radius:6px;cursor:pointer;font-family:inherit">+ إضافة</button>
+        <button class="btn btn-outline btn-sm" onclick="pkEditType('${i.type}')">✏️</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="pkDeleteType('${i.type}')">🗑️</button>
       </td></tr>`;
   }).join('');
   return `<div style="${pks}">
@@ -433,6 +436,47 @@ function pkBuildMainStock() {
       <thead><tr><th>النوع</th><th>الكمية</th><th>الحد الأدنى</th><th>الحالة</th><th>إضافة كمية</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
+}
+
+function pkEditType(oldType) {
+  const newType = prompt('تعديل اسم النوع:', oldType);
+  if (!newType || newType === oldType) return;
+  // Update types list
+  const types = invGetTypes();
+  const ti = types.indexOf(oldType);
+  if (ti >= 0) types[ti] = newType;
+  DB.set('invTypes', types);
+  // Update main stock
+  const main = invGetMainStock();
+  main.forEach(i => { if (i.type === oldType) i.type = newType; });
+  invSaveMain(main);
+  // Update branch stock
+  const bs = invGetBranchStock();
+  bs.forEach(i => { if (i.type === oldType) i.type = newType; });
+  invSaveBranch(bs);
+  pkShowTab('pkmain');
+  showToast('✅ تم تعديل اسم النوع إلى: ' + newType);
+}
+
+function pkDeleteType(type) {
+  if (!confirm(`هل تريد حذف نوع "${type}" من المخزن الرئيسي وجميع الفروع؟`)) return;
+  // Remove from types
+  const types = invGetTypes().filter(t => t !== type);
+  DB.set('invTypes', types);
+  // Remove from main stock
+  invSaveMain(invGetMainStock().filter(i => i.type !== type));
+  // Remove from branch stock
+  invSaveBranch(invGetBranchStock().filter(i => i.type !== type));
+  pkShowTab('pkmain');
+  showToast('🗑️ تم حذف النوع: ' + type);
+}
+
+function pkDeleteBranchItem(branch, type) {
+  if (!confirm(`هل تريد إزالة "${type}" من فرع ${BRANCHES[branch]?.name}؟`)) return;
+  const bs = invGetBranchStock().filter(i => !(i.branch === branch && i.type === type));
+  invSaveBranch(bs);
+  pkShowTab('pkbranches');
+  showToast(`🗑️ تم إزالة ${type} من فرع ${BRANCHES[branch]?.name}`);
 }
 
 function pkAddToMain(type) {
@@ -497,7 +541,10 @@ function pkBuildBranches() {
     const rows = bStock.map(i => {
       const st = i.qty<8?pkDanger('نفذ تقريباً'):i.qty<15?pkWarn('منخفض'):pkOk('متاح');
       return `<tr><td><b>${i.type}</b></td><td>${i.qty}</td><td>${i.minQty||INV_MIN_QTY}</td><td>${st}</td>
-        <td><button class="btn btn-outline btn-sm" onclick="pkTransferToBranch('${b}','${i.type}')">📤 تحويل</button></td></tr>`;
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="pkTransferToBranch('${b}','${i.type}')">📤 تحويل</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="pkDeleteBranchItem('${b}','${i.type}')">🗑️</button>
+        </td></tr>`;
     }).join('');
     return `<div style="${pks}"><b style="font-size:14px">🏪 فرع ${BRANCHES[b].name} — ${tot} قطعة</b>
       <div class="table-wrap" style="margin-top:12px"><table>
