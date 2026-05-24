@@ -5,19 +5,7 @@
 // ============================================================
 // GRADES HELPERS (defined here to avoid dependency on app.js version)
 // ============================================================
-// Grades helpers — safe definition
-try {
-  if (typeof GRADES_DEFAULT === 'undefined') {
-    var GRADES_DEFAULT = [
-      { id:'nursery', label:'حضانة (2-3 سنوات)' },
-      { id:'KG1',     label:'KG1 (3-4 سنوات)'  },
-      { id:'KG2',     label:'KG2 (4-5 سنوات)'  }
-    ];
-  }
-} catch(e) {}
-
-function getGrades()     { try { return DB.get('appGrades') || GRADES_DEFAULT; } catch(e) { return [{id:'nursery',label:'حضانة'},{id:'KG1',label:'KG1'},{id:'KG2',label:'KG2'}]; } }
-function saveGrades(arr) { try { DB.set('appGrades', arr); } catch(e) {} }
+// getGrades + saveGrades + GRADES_DEFAULT are defined in app.js
 
 // ============================================================
 function renderSettings() {
