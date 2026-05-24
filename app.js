@@ -456,8 +456,296 @@ function deleteStudent(id, name) {
 // exportStudentsExcel defined in app-students.js
 function renderFees()    {}
 function renderReports() {}
-function renderClothes() {}
-function renderSupplies(){}
+// ============================================================
+// CLOTHES
+// ============================================================
+function renderClothes() {
+  const page = document.getElementById('page-clothes');
+  if (!page) return;
+
+  const items = filterByBranch(DB.all('clothes'));
+
+  page.innerHTML = `
+    <div class="filter-bar" style="margin-bottom:16px">
+      <button class="btn btn-primary" onclick="openAddClothes()">➕ إضافة صنف</button>
+      <button class="btn btn-outline" onclick="exportClothesExcel()">📥 Excel</button>
+      <button class="btn btn-outline" onclick="printClothesReport()">🖨️ PDF</button>
+    </div>
+    <div class="card">
+      <div class="card-title">👕 مخزن الملابس</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الكود</th><th>الصنف</th><th>المقاس</th>
+              <th>الفرع</th><th>الكمية</th><th>الحد الأدنى</th>
+              <th>الحالة</th><th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.length ? items.map(i => {
+              const low = i.qty <= i.minQty;
+              return `<tr>
+                <td>${i.id}</td>
+                <td>${i.name}</td>
+                <td>${i.size||'—'}</td>
+                <td><span class="badge ${BRANCHES[i.branch]?.badge||'badge-gray'}">${BRANCHES[i.branch]?.name||i.branch}</span></td>
+                <td><b>${i.qty}</b></td>
+                <td>${i.minQty||0}</td>
+                <td><span class="badge ${low?'badge-red':'badge-green'}">${low?'منخفض':'كافي'}</span></td>
+                <td>
+                  <button class="btn btn-outline btn-sm" onclick="editClothes('${i.id}')">✏️</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="deleteClothes('${i.id}')">🗑️</button>
+                </td>
+              </tr>`;
+            }).join('') : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد أصناف مضافة</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="modal-clothes"></div>
+  `;
+}
+
+function openAddClothes(id) {
+  const item = id ? DB.all('clothes').find(i => i.id === id) : null;
+  const html = `
+    <div class="modal-overlay open" id="mc">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h3>${item ? 'تعديل صنف' : 'إضافة صنف ملابس'}</h3>
+          <button class="modal-close" onclick="document.getElementById('mc').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="cId" value="${item?.id||''}">
+          <div class="form-group"><label>اسم الصنف *</label><input id="cName" class="form-control" value="${item?.name||''}"></div>
+          <div class="form-row">
+            <div class="form-group"><label>المقاس</label><input id="cSize" class="form-control" value="${item?.size||''}"></div>
+            <div class="form-group"><label>الفرع *</label>
+              <select id="cBranch" class="form-control" ${currentUser?.role!=='admin'?'disabled':''}>
+                ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}" ${(item?.branch||currentUser?.branch||'esh')===k?'selected':''}>${v.name}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>الكمية *</label><input id="cQty" class="form-control" type="number" value="${item?.qty||0}"></div>
+            <div class="form-group"><label>الحد الأدنى</label><input id="cMin" class="form-control" type="number" value="${item?.minQty||5}"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="saveClothes()">💾 حفظ</button>
+          <button class="btn btn-outline" onclick="document.getElementById('mc').remove()">إلغاء</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-clothes').innerHTML = html;
+}
+
+function saveClothes() {
+  const name = document.getElementById('cName').value.trim();
+  if (!name) { showToast('❌ يرجى إدخال اسم الصنف'); return; }
+  const id = document.getElementById('cId').value;
+  const data = {
+    name,
+    size:   document.getElementById('cSize').value.trim(),
+    branch: document.getElementById('cBranch').value,
+    qty:    parseInt(document.getElementById('cQty').value)||0,
+    minQty: parseInt(document.getElementById('cMin').value)||5
+  };
+  if (id) DB.update('clothes', id, data);
+  else    DB.add('clothes', { id: DB.nextId('clothes','C'), ...data });
+  document.getElementById('mc').remove();
+  showToast('✅ تم الحفظ');
+  renderClothes();
+}
+
+function editClothes(id)   { openAddClothes(id); }
+
+function deleteClothes(id) {
+  if (!confirm('هل تريد حذف هذا الصنف؟')) return;
+  DB.remove('clothes', id);
+  showToast('🗑️ تم الحذف');
+  renderClothes();
+}
+
+function exportClothesExcel() {
+  const items = filterByBranch(DB.all('clothes'));
+  const data = items.map(i => ({
+    'الكود':     i.id,
+    'الصنف':     i.name,
+    'المقاس':    i.size||'—',
+    'الفرع':     BRANCHES[i.branch]?.name||i.branch,
+    'الكمية':    i.qty,
+    'الحد الأدنى': i.minQty||0,
+    'الحالة':    i.qty<=(i.minQty||0) ? 'منخفض' : 'كافي'
+  }));
+  xlsxExport(data, 'مخزن_الملابس');
+}
+
+function printClothesReport() {
+  const items = filterByBranch(DB.all('clothes'));
+  const rows = items.map(i => [
+    i.id, i.name, i.size||'—',
+    BRANCHES[i.branch]?.name||i.branch,
+    i.qty, i.minQty||0,
+    i.qty<=(i.minQty||0)?'منخفض':'كافي'
+  ]);
+  printReport('تقرير مخزن الملابس',
+    ['الكود','الصنف','المقاس','الفرع','الكمية','الحد الأدنى','الحالة'], rows);
+}
+
+// ============================================================
+// SUPPLIES
+// ============================================================
+function renderSupplies() {
+  const page = document.getElementById('page-supplies');
+  if (!page) return;
+
+  const items = filterByBranch(DB.all('supplies'));
+  const today = new Date();
+
+  page.innerHTML = `
+    <div class="filter-bar" style="margin-bottom:16px">
+      <button class="btn btn-primary" onclick="openAddSupply()">➕ إضافة صنف</button>
+      <button class="btn btn-outline" onclick="exportSuppliesExcel()">📥 Excel</button>
+      <button class="btn btn-outline" onclick="printSuppliesReport()">🖨️ PDF</button>
+    </div>
+    <div class="card">
+      <div class="card-title">📦 المستهلكات</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الفرع</th>
+              <th>الكمية</th><th>تاريخ الاستلام</th><th>تاريخ الانتهاء</th>
+              <th>الحالة</th><th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.length ? items.map(i => {
+              const d = daysUntil(i.expiryDate);
+              const st = d < 0 ? {label:'منتهي',cls:'badge-red'} : d < 30 ? {label:'ينتهي قريباً',cls:'badge-orange'} : {label:'جيد',cls:'badge-green'};
+              return `<tr>
+                <td>${i.id}</td>
+                <td>${i.name}</td>
+                <td>${i.unit||'—'}</td>
+                <td><span class="badge ${BRANCHES[i.branch]?.badge||'badge-gray'}">${BRANCHES[i.branch]?.name||i.branch}</span></td>
+                <td><b>${i.qty}</b></td>
+                <td>${fmtDate(i.receiveDate)||'—'}</td>
+                <td>${fmtDate(i.expiryDate)||'—'}</td>
+                <td><span class="badge ${st.cls}">${st.label}</span></td>
+                <td>
+                  <button class="btn btn-outline btn-sm" onclick="editSupply('${i.id}')">✏️</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="deleteSupply('${i.id}')">🗑️</button>
+                </td>
+              </tr>`;
+            }).join('') : '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد أصناف مضافة</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="modal-supply"></div>
+  `;
+}
+
+function openAddSupply(id) {
+  const item = id ? DB.all('supplies').find(i => i.id === id) : null;
+  const html = `
+    <div class="modal-overlay open" id="ms">
+      <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+          <h3>${item ? 'تعديل صنف' : 'إضافة صنف مستهلكات'}</h3>
+          <button class="modal-close" onclick="document.getElementById('ms').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="supId" value="${item?.id||''}">
+          <div class="form-row">
+            <div class="form-group"><label>اسم الصنف *</label><input id="supName" class="form-control" value="${item?.name||''}"></div>
+            <div class="form-group"><label>الوحدة</label><input id="supUnit" class="form-control" value="${item?.unit||''}"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>الفرع *</label>
+              <select id="supBranch" class="form-control" ${currentUser?.role!=='admin'?'disabled':''}>
+                ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}" ${(item?.branch||currentUser?.branch||'esh')===k?'selected':''}>${v.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group"><label>الكمية *</label><input id="supQty" class="form-control" type="number" value="${item?.qty||0}"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>تاريخ الاستلام</label><input id="supReceive" class="form-control" type="date" value="${item?.receiveDate||''}"></div>
+            <div class="form-group"><label>تاريخ الانتهاء</label><input id="supExpiry" class="form-control" type="date" value="${item?.expiryDate||''}"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="saveSupply()">💾 حفظ</button>
+          <button class="btn btn-outline" onclick="document.getElementById('ms').remove()">إلغاء</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-supply').innerHTML = html;
+}
+
+function saveSupply() {
+  const name = document.getElementById('supName').value.trim();
+  if (!name) { showToast('❌ يرجى إدخال اسم الصنف'); return; }
+  const id = document.getElementById('supId').value;
+  const data = {
+    name,
+    unit:        document.getElementById('supUnit').value.trim(),
+    branch:      document.getElementById('supBranch').value,
+    qty:         parseFloat(document.getElementById('supQty').value)||0,
+    receiveDate: document.getElementById('supReceive').value,
+    expiryDate:  document.getElementById('supExpiry').value
+  };
+  if (id) DB.update('supplies', id, data);
+  else    DB.add('supplies', { id: DB.nextId('supplies','P'), ...data });
+  document.getElementById('ms').remove();
+  showToast('✅ تم الحفظ');
+  renderSupplies();
+}
+
+function editSupply(id)   { openAddSupply(id); }
+
+function deleteSupply(id) {
+  if (!confirm('هل تريد حذف هذا الصنف؟')) return;
+  DB.remove('supplies', id);
+  showToast('🗑️ تم الحذف');
+  renderSupplies();
+}
+
+function exportSuppliesExcel() {
+  const items = filterByBranch(DB.all('supplies'));
+  const data = items.map(i => {
+    const d = daysUntil(i.expiryDate);
+    return {
+      'الكود':          i.id,
+      'الصنف':          i.name,
+      'الوحدة':         i.unit||'—',
+      'الفرع':          BRANCHES[i.branch]?.name||i.branch,
+      'الكمية':         i.qty,
+      'تاريخ الاستلام': fmtDate(i.receiveDate)||'—',
+      'تاريخ الانتهاء': fmtDate(i.expiryDate)||'—',
+      'الحالة':         d < 0 ? 'منتهي' : d < 30 ? 'ينتهي قريباً' : 'جيد'
+    };
+  });
+  xlsxExport(data, 'المستهلكات');
+}
+
+function printSuppliesReport() {
+  const items = filterByBranch(DB.all('supplies'));
+  const rows = items.map(i => {
+    const d = daysUntil(i.expiryDate);
+    return [
+      i.id, i.name, i.unit||'—',
+      BRANCHES[i.branch]?.name||i.branch,
+      i.qty, fmtDate(i.receiveDate)||'—',
+      fmtDate(i.expiryDate)||'—',
+      d < 0 ? 'منتهي' : d < 30 ? 'ينتهي قريباً' : 'جيد'
+    ];
+  });
+  printReport('تقرير المستهلكات',
+    ['الكود','الصنف','الوحدة','الفرع','الكمية','تاريخ الاستلام','تاريخ الانتهاء','الحالة'], rows);
+}
 function renderMessages(){}
 function renderAutoreply(){}
 function renderHR()      {}
