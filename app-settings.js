@@ -133,6 +133,7 @@ function settTab(tab, el) {
   if (tab === 'users')   renderUsersTab(cont);
   if (tab === 'perms')   renderPermsTab(cont);
   if (tab === 'nursery') renderNurseryTab(cont);
+  if (tab === 'grades')  renderGradesTab(cont);
   if (tab === 'data')    renderDataTab(cont);
 }
 
