@@ -295,6 +295,8 @@ function invGetBranchStock() {
 }
 function invGetDispatch()    { return DB.get('invDispatch')    || []; }
 function invGetRequests()    { return DB.get('invRequests')    || []; }
+function invGetSizes()       { return DB.get('invSizes') || ['2 سنوات','3 سنوات','4 سنوات','5 سنوات','6 سنوات','7 سنوات','8 سنوات']; }
+function invSaveSizes(arr)   { DB.set('invSizes', arr); }
 function invSaveMain(d)      { DB.set('invMainStock', d); }
 function invSaveBranch(d)    { DB.set('invBranchStock', d); }
 function invSaveDispatch(d)  { DB.set('invDispatch', d); }
@@ -381,7 +383,18 @@ function pkBuildAdminDash() {
     .map(d=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
       <b>${d.childName}</b><span style="color:var(--text-muted)">${BRANCHES[d.branch]?.name||d.branch} | ${d.type} ×${d.qty}</span></div>`).join('') || '<p style="color:var(--text-muted);font-size:13px">لا توجد عمليات بعد</p>';
 
-  return `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+  return `
+  <!-- Sizes Settings Card -->
+  <div style="${pks};margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <b style="font-size:14px">📏 إدارة المقاسات</b>
+      <button class="btn btn-primary btn-sm" onclick="pkOpenSizesManager()">⚙️ تعديل المقاسات</button>
+    </div>
+    <div id="sizesBadges" style="display:flex;flex-wrap:wrap;gap:6px">
+      ${invGetSizes().map(s=>`<span class="badge badge-blue" style="padding:5px 10px;font-size:13px">${s}</span>`).join('')}
+    </div>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
     <div style="${pkm}"><div style="font-size:22px;font-weight:700;color:var(--primary)">${tMain}</div><div style="font-size:11px;color:var(--text-muted)">المخزن الرئيسي</div></div>
     <div style="${pkm}"><div style="font-size:22px;font-weight:700;color:var(--info,#378ADD)">${tBranch}</div><div style="font-size:11px;color:var(--text-muted)">إجمالي الفروع</div></div>
     <div style="${pkm}"><div style="font-size:22px;font-weight:700;color:var(--accent)">${pend}</div><div style="font-size:11px;color:var(--text-muted)">طلبات معلقة</div></div>
@@ -522,7 +535,7 @@ function pkBuildRequests() {
              <button onclick="pkRejectReq('${r.id}')" style="font-size:11px;padding:4px 8px;border:1px solid #dc2626;background:#fef2f2;color:#991b1b;border-radius:6px;cursor:pointer;font-family:inherit">❌ رفض</button>`
           : '—';
         return `<tr><td>${r.id}</td><td>${BRANCHES[r.branch]?.name||r.branch}</td>
-          <td>${r.type}</td><td>${r.qty}</td><td>${fmtDate(r.date)}</td>
+          <td>${r.type}</td><td>${r.size||'—'}</td><td>${r.qty}</td><td>${fmtDate(r.date)}</td>
           <td>${st}</td><td>${act}</td></tr>`;
       }).join('')
     : `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد طلبات</td></tr>`;
@@ -535,7 +548,7 @@ function pkBuildRequests() {
       </div>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>رقم</th><th>الفرع</th><th>النوع</th><th>الكمية</th><th>التاريخ</th><th>الحالة</th><th>إجراء</th></tr></thead>
+      <thead><tr><th>رقم</th><th>الفرع</th><th>النوع</th><th>المقاس</th><th>الكمية</th><th>التاريخ</th><th>الحالة</th><th>إجراء</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
 }
@@ -660,10 +673,7 @@ function pkBuildDispatchForm() {
       <div class="form-group" style="margin:0"><label>المقاس</label>
         <select id="pkd-size" class="form-control">
           <option value="">— اختر المقاس —</option>
-          <option>2 سنوات</option><option>3 سنوات</option>
-          <option>4 سنوات</option><option>5 سنوات</option>
-          <option>6 سنوات</option><option>7 سنوات</option>
-          <option>8 سنوات</option>
+          ${invGetSizes().map(s=>`<option>${s}</option>`).join('')}
         </select></div>
       <div class="form-group" style="margin:0"><label>الكمية</label>
         <input id="pkd-qty" type="number" class="form-control" value="1" min="1"></div>
@@ -707,7 +717,7 @@ function pkBuildRequestForm() {
   const rows = reqs.length
     ? reqs.slice().reverse().map(r=>{
         const st = r.status==='approved'?pkOk('موافق'):r.status==='rejected'?pkDanger('مرفوض'):pkWarn('انتظار');
-        return `<tr><td>${r.id}</td><td>${r.type}</td><td>${r.qty}</td><td>${fmtDate(r.date)}</td><td>${st}</td></tr>`;
+        return `<tr><td>${r.id}</td><td>${r.type}</td><td>${r.size||'—'}</td><td>${r.qty}</td><td>${fmtDate(r.date)}</td><td>${st}</td></tr>`;
       }).join('')
     : `<tr><td colspan="5" style="text-align:center;padding:14px;color:var(--text-muted)">لا توجد طلبات</td></tr>`;
   const today = new Date().toISOString().split('T')[0];
@@ -715,6 +725,11 @@ function pkBuildRequestForm() {
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">
       <div class="form-group" style="margin:0"><label>نوع القطعة</label>
         <select id="pkr-type" class="form-control">${typeOpts}</select></div>
+      <div class="form-group" style="margin:0"><label>المقاس</label>
+        <select id="pkr-size" class="form-control">
+          <option value="">— اختر —</option>
+          ${invGetSizes().map(s=>`<option>${s}</option>`).join('')}
+        </select></div>
       <div class="form-group" style="margin:0"><label>الكمية المطلوبة</label>
         <input id="pkr-qty" type="number" class="form-control" value="10" min="1" style="width:100px"></div>
       <div class="form-group" style="margin:0;align-self:flex-end">
@@ -724,7 +739,7 @@ function pkBuildRequestForm() {
     <hr style="margin:16px 0;border-color:var(--border)">
     <b>طلباتي السابقة</b>
     <div class="table-wrap" style="margin-top:10px"><table>
-      <thead><tr><th>رقم</th><th>النوع</th><th>الكمية</th><th>التاريخ</th><th>الحالة</th></tr></thead>
+      <thead><tr><th>رقم</th><th>النوع</th><th>المقاس</th><th>الكمية</th><th>التاريخ</th><th>الحالة</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
 }
@@ -732,11 +747,12 @@ function pkBuildRequestForm() {
 function pkSubmitRequest() {
   const b    = invBranchKey();
   const type = document.getElementById('pkr-type')?.value;
+  const size = document.getElementById('pkr-size')?.value || '';
   const qty  = parseInt(document.getElementById('pkr-qty')?.value)||0;
   if (qty <= 0) { showToast('⚠️ أدخل كمية صالحة'); return; }
   const reqs = invGetRequests();
   const id   = `RQ-${String(reqs.length+1).padStart(3,'0')}`;
-  reqs.push({id, branch:b, type, qty, date:new Date().toISOString().split('T')[0], status:'pending'});
+  reqs.push({id, branch:b, type, size, qty, date:new Date().toISOString().split('T')[0], status:'pending'});
   invSaveRequests(reqs);
   pkShowTab('pkbreq');
   showToast('✅ تم إرسال الطلب — بانتظار موافقة الإدارة');
@@ -1332,6 +1348,82 @@ function printStudentReport(sid) {
 }
 
 // ============================================================
+// SIZES MANAGER
+// ============================================================
+function pkOpenSizesManager() {
+  const sizes = invGetSizes();
+  document.getElementById('modals').innerHTML = `
+    <div class="modal-overlay open" id="modal-sizes">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h3>📏 إدارة المقاسات</h3>
+          <button class="modal-close" onclick="closeModal('modal-sizes')">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">اضف أو احذف المقاسات المتاحة في فورم الصرف والطلبات</p>
+          <div id="sizesList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+            ${sizes.map(s=>`
+              <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-secondary,#f5f5f5);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px">
+                ${s}
+                <button onclick="pkRemoveSize('${s}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+              </span>`).join('')}
+          </div>
+          <div style="display:flex;gap:8px">
+            <input id="newSizeInput" class="form-control" placeholder="مثال: 9 سنوات" style="flex:1">
+            <button class="btn btn-primary" onclick="pkAddSize()">➕ إضافة</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="pkSaveSizes()">💾 حفظ</button>
+          <button class="btn btn-outline" onclick="closeModal('modal-sizes')">إلغاء</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+let _tempSizes = null;
+function pkRemoveSize(size) {
+  if (!_tempSizes) _tempSizes = [...invGetSizes()];
+  _tempSizes = _tempSizes.filter(s => s !== size);
+  const list = document.getElementById('sizesList');
+  if (list) list.innerHTML = _tempSizes.map(s=>`
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-secondary,#f5f5f5);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px">
+      ${s}
+      <button onclick="pkRemoveSize('${s}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+    </span>`).join('');
+}
+
+function pkAddSize() {
+  if (!_tempSizes) _tempSizes = [...invGetSizes()];
+  const input = document.getElementById('newSizeInput');
+  const val = input?.value.trim();
+  if (!val) return;
+  if (_tempSizes.includes(val)) { showToast('المقاس موجود بالفعل'); return; }
+  _tempSizes.push(val);
+  input.value = '';
+  pkRemoveSize('__refresh__'); // trigger re-render
+  _tempSizes = _tempSizes.filter(s => s !== '__refresh__');
+  const list = document.getElementById('sizesList');
+  if (list) list.innerHTML = _tempSizes.map(s=>`
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-secondary,#f5f5f5);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px">
+      ${s}
+      <button onclick="pkRemoveSize('${s}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
+    </span>`).join('');
+}
+
+function pkSaveSizes() {
+  const sizes = _tempSizes || invGetSizes();
+  invSaveSizes(sizes);
+  _tempSizes = null;
+  closeModal('modal-sizes');
+  showToast('✅ تم حفظ المقاسات');
+  // refresh badges
+  const badges = document.getElementById('sizesBadges');
+  if (badges) badges.innerHTML = sizes.map(s=>`<span class="badge badge-blue" style="padding:5px 10px;font-size:13px">${s}</span>`).join('');
+  pkShowTab('pkdash');
+}
+
+// ============================================================
 // CLOTHES EXPORT FUNCTIONS
 // ============================================================
 function pkExportMainExcel() {
@@ -1360,14 +1452,14 @@ function pkPrintBranchesReport() {
 function pkExportRequestsExcel() {
   const data = invGetRequests().map(r => ({
     'الرقم': r.id, 'الفرع': BRANCHES[r.branch]?.name||r.branch,
-    'النوع': r.type, 'الكمية': r.qty, 'التاريخ': fmtDate(r.date),
+    'النوع': r.type, 'المقاس': r.size||'—', 'الكمية': r.qty, 'التاريخ': fmtDate(r.date),
     'الحالة': r.status==='approved'?'موافق':r.status==='rejected'?'مرفوض':'انتظار'
   }));
   xlsxExport(data, 'طلبات_التزويد_ملابس');
 }
 function pkPrintRequestsReport() {
-  const rows = invGetRequests().map(r => [r.id, BRANCHES[r.branch]?.name||r.branch, r.type, r.qty, fmtDate(r.date), r.status==='approved'?'موافق':r.status==='rejected'?'مرفوض':'انتظار']);
-  printReport('طلبات التزويد — ملابس', ['الرقم','الفرع','النوع','الكمية','التاريخ','الحالة'], rows);
+  const rows = invGetRequests().map(r => [r.id, BRANCHES[r.branch]?.name||r.branch, r.type, r.size||'—', r.qty, fmtDate(r.date), r.status==='approved'?'موافق':r.status==='rejected'?'مرفوض':'انتظار']);
+  printReport('طلبات التزويد — ملابس', ['الرقم','الفرع','النوع','المقاس','الكمية','التاريخ','الحالة'], rows);
 }
 function pkExportLogExcel(branch) {
   let log = invGetDispatch();
