@@ -233,7 +233,7 @@ function repTab(el, id) {
 
 function renderPaymentsReport(branchF) {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   const rows = installs.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
@@ -255,7 +255,7 @@ function renderPaymentsReport(branchF) {
 
 function renderPlanReport() {
   const installs = DB.all('installments');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   const rows = installs.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
@@ -408,9 +408,13 @@ function pkBuildMainStock() {
       </td></tr>`;
   }).join('');
   return `<div style="${pks}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <b style="font-size:14px">🏭 المخزن الرئيسي</b>
-      <button class="btn btn-primary btn-sm" onclick="pkOpenAddType()">➕ نوع جديد</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="pkExportMainExcel()">📥 Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="pkPrintMainReport()">🖨️ PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="pkOpenAddType()">➕ نوع جديد</button>
+      </div>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>النوع</th><th>الكمية</th><th>الحد الأدنى</th><th>الحالة</th><th>إضافة كمية</th></tr></thead>
@@ -468,6 +472,23 @@ function pkSaveNewType() {
 }
 
 // Admin: Branch stocks
+function pkExportMainExcel() {
+  const data = invGetMainStock().map(i => ({
+    'النوع': i.type,
+    'الكمية': i.qty,
+    'الحد الأدنى': INV_MIN_QTY,
+    'الحالة': i.qty < INV_MIN_QTY ? 'منخفض' : i.qty < INV_MIN_QTY*2 ? 'متوسط' : 'جيد'
+  }));
+  xlsxExport(data, 'المخزن_الرئيسي_ملابس');
+}
+function pkPrintMainReport() {
+  const rows = invGetMainStock().map(i => [
+    i.type, i.qty, INV_MIN_QTY,
+    i.qty < INV_MIN_QTY ? 'منخفض' : i.qty < INV_MIN_QTY*2 ? 'متوسط' : 'جيد'
+  ]);
+  printReport('تقرير المخزن الرئيسي — ملابس', ['النوع','الكمية','الحد الأدنى','الحالة'], rows);
+}
+
 function pkBuildBranches() {
   const stock = invGetBranchStock();
   return ['esh','sol','mat'].map(b => {
@@ -503,6 +524,28 @@ function pkTransferToBranch(branch, type) {
 }
 
 // Admin: Requests
+function pkExportBranchesExcel() {
+  const branch = invGetBranchStock();
+  const data = branch.map(i => ({
+    'النوع': i.type,
+    'الفرع': BRANCHES[i.branch]?.name || i.branch,
+    'الكمية': i.qty,
+    'الحد الأدنى': i.minQty || INV_MIN_QTY,
+    'الحالة': i.qty < (i.minQty||INV_MIN_QTY) ? 'منخفض' : 'كافي'
+  }));
+  xlsxExport(data, 'أرصدة_الفروع_ملابس');
+}
+function pkPrintBranchesReport() {
+  const branch = invGetBranchStock();
+  const rows = branch.map(i => [
+    i.type, BRANCHES[i.branch]?.name||i.branch, i.qty,
+    i.minQty||INV_MIN_QTY,
+    i.qty < (i.minQty||INV_MIN_QTY) ? 'منخفض' : 'كافي'
+  ]);
+  printReport('تقرير أرصدة الفروع — ملابس',
+    ['النوع','الفرع','الكمية','الحد الأدنى','الحالة'], rows);
+}
+
 function pkBuildRequests() {
   const reqs = invGetRequests();
   const rows = reqs.length
@@ -553,6 +596,30 @@ function pkRejectReq(id) {
 }
 
 // Admin: Dispatch log
+function pkExportLogExcel(branch) {
+  let log = invGetDispatch();
+  if (branch) log = log.filter(d => d.branch === branch);
+  const data = log.map(d => ({
+    'اسم الطفل': d.childName||'—',
+    'النوع': d.type,
+    'الكمية': d.qty,
+    'الفرع': BRANCHES[d.branch]?.name||d.branch,
+    'المرحلة': d.grade||'—',
+    'التاريخ': d.date||'—'
+  }));
+  xlsxExport(data, 'سجل_صرف_الملابس');
+}
+function pkPrintLogReport(branch) {
+  let log = invGetDispatch();
+  if (branch) log = log.filter(d => d.branch === branch);
+  const rows = log.map(d => [
+    d.childName||'—', d.type, d.qty,
+    BRANCHES[d.branch]?.name||d.branch, d.grade||'—', d.date||'—'
+  ]);
+  printReport('سجل صرف الملابس',
+    ['اسم الطفل','النوع','الكمية','الفرع','المرحلة','التاريخ'], rows);
+}
+
 function pkBuildLog(branch) {
   const log = invGetDispatch().filter(d=>!branch||d.branch===branch).slice().reverse();
   const rows = log.length
@@ -741,7 +808,7 @@ function supShowTab(id) {
 }
 
 function supBuildAdminDash() {
-  const items = filterByBranch(DB.all('supplies'));
+  const items = DB.all('supplies');
   const expiring = items.filter(s=>daysUntil(s.expiryDate)>=0&&daysUntil(s.expiryDate)<30);
   const expired  = items.filter(s=>daysUntil(s.expiryDate)<0);
   const alerts = [...expired.map(s=>`<div style="padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:6px;border:1px solid #fca5a5;background:#fef2f2;color:#991b1b">🔴 ${s.name} (${BRANCHES[s.branch]?.name}): منتهي الصلاحية</div>`),
@@ -805,6 +872,7 @@ function supBuildInventory(branch) {
       ${branchSel}
       <button class="btn btn-primary" onclick="supOpenAdd('${branch}')">➕ إضافة صنف</button>
       <button class="btn btn-outline" onclick="supExportExcel('${branch}')">📥 Excel</button>
+      <button class="btn btn-outline" onclick="supPrintReport('${branch}')">🖨️ PDF</button>
     </div>
     <div class="card"><div class="table-wrap" id="supTableWrap">
       <table>
@@ -967,6 +1035,31 @@ function supSubmitDispatch() {
   showToast('✅ تم تسجيل الصرف');
 }
 
+function supExportLogExcel(branch) {
+  let log = supGetDispatchLog();
+  if (branch) log = log.filter(d => d.branch === branch);
+  const data = log.map(d => ({
+    'الصنف':    d.itemName||'—',
+    'الوحدة':   d.unit||'—',
+    'الكمية':   d.qty,
+    'الفرع':    BRANCHES[d.branch]?.name||d.branch,
+    'الغرض':    d.purpose||'—',
+    'التاريخ':  fmtDate(d.date)||'—'
+  }));
+  xlsxExport(data, 'سجل_صرف_المستهلكات');
+}
+function supPrintLogReport(branch) {
+  let log = supGetDispatchLog();
+  if (branch) log = log.filter(d => d.branch === branch);
+  const rows = log.map(d => [
+    d.itemName||'—', d.unit||'—', d.qty,
+    BRANCHES[d.branch]?.name||d.branch,
+    d.purpose||'—', fmtDate(d.date)||'—'
+  ]);
+  printReport('سجل صرف المستهلكات',
+    ['الصنف','الوحدة','الكمية','الفرع','الغرض','التاريخ'], rows);
+}
+
 function supBuildLog(branch) {
   const log = supGetDispatchLog().filter(d=>!branch||d.branch===branch).slice().reverse();
   const rows = log.length
@@ -1019,6 +1112,23 @@ function supSubmitReq() {
   showToast(`✅ تم إرسال طلب: ${qty} ${document.getElementById('supreq-unit')?.value||''} من ${name}`);
 }
 
+function supPrintReport(branch) {
+  let list = DB.all('supplies');
+  if (branch !== 'all') list = list.filter(s => s.branch === branch);
+  const rows = list.map(s => {
+    const d = daysUntil(s.expiryDate);
+    return [
+      s.name, s.unit||'—',
+      BRANCHES[s.branch]?.name||s.branch,
+      s.qty, fmtDate(s.receiveDate)||'—',
+      fmtDate(s.expiryDate)||'—',
+      d<0?'منتهي':d<30?'ينتهي قريباً':'جيد'
+    ];
+  });
+  printReport('تقرير المستهلكات',
+    ['الصنف','الوحدة','الفرع','الكمية','تاريخ الاستلام','تاريخ الانتهاء','الحالة'], rows);
+}
+
 function supExportExcel(branch) {
   let list = DB.all('supplies');
   if (branch!=='all') list = list.filter(s=>s.branch===branch);
@@ -1057,7 +1167,7 @@ function exportFeesExcel() {
 
 function exportPaymentsExcel() {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   const data = installs.map(i => {
     const s = students.find(x => x.id === i.studentId) || {};
     return {
@@ -1071,7 +1181,7 @@ function exportPaymentsExcel() {
 
 function exportPlanExcel() {
   const installs = DB.all('installments');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   const data = installs.map(i => {
     const s    = students.find(x => x.id === i.studentId) || {};
     const late = i.status === 'pending' && daysUntil(i.dueDate) < 0;
@@ -1123,7 +1233,7 @@ function printFeesReport() {
 
 function printPaymentsReport() {
   const installs = DB.all('installments').filter(i => i.status === 'paid');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   printReport('تقرير المدفوعات',
     ['الطالب','الفرع','تاريخ الدفع','المبلغ','الطريقة'],
     installs.map(i => {
@@ -1135,7 +1245,7 @@ function printPaymentsReport() {
 
 function printPlanReport() {
   const installs = DB.all('installments');
-  const students = filterByBranch(DB.all('students'));
+  const students = DB.all('students');
   printReport('خطة الأقساط',
     ['الطالب','الفرع','القسط','المبلغ','الاستحقاق','الدفع','الحالة'],
     installs.map(i => {
