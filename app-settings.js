@@ -2,6 +2,19 @@
 // APP-SETTINGS.JS  —  System settings & user management
 // ============================================================
 
+// ============================================================
+// GRADES HELPERS (defined here to avoid dependency on app.js version)
+// ============================================================
+const GRADES_DEFAULT = [
+  { id:'nursery', label:'حضانة (2-3 سنوات)' },
+  { id:'KG1',     label:'KG1 (3-4 سنوات)'   },
+  { id:'KG2',     label:'KG2 (4-5 سنوات)'   }
+];
+
+function getGrades()       { return DB.get('appGrades') || GRADES_DEFAULT; }
+function saveGrades(arr)   { DB.set('appGrades', arr); }
+
+// ============================================================
 function renderSettings() {
   const cont = document.getElementById('page-settings');
   if (!cont) return;
@@ -387,6 +400,43 @@ function renderDataTab(cont) {
         <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(event)">
       </div>
       <hr>
+      <h4>📊 استيراد Excel</h4>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">حمّل النموذج أولاً، عبّيه، ثم ارفعه</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-weight:700;margin-bottom:8px">👦 الطلاب</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="downloadStudentsTemplate()">📄 نموذج</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('impStudents').click()">📤 رفع</button>
+            <input type="file" id="impStudents" accept=".xlsx,.xls" style="display:none" onchange="importStudentsFromExcel(event)">
+          </div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-weight:700;margin-bottom:8px">👕 مخزن الملابس</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="downloadClothesTemplate()">📄 نموذج</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('impClothes').click()">📤 رفع</button>
+            <input type="file" id="impClothes" accept=".xlsx,.xls" style="display:none" onchange="importClothesFromExcel(event)">
+          </div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-weight:700;margin-bottom:8px">📦 المستهلكات</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="downloadSuppliesTemplate()">📄 نموذج</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('impSupplies').click()">📤 رفع</button>
+            <input type="file" id="impSupplies" accept=".xlsx,.xls" style="display:none" onchange="importSuppliesFromExcel(event)">
+          </div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px">
+          <div style="font-weight:700;margin-bottom:8px">👩‍🏫 الموظفين</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="downloadEmployeesTemplate()">📄 نموذج</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('impEmployees').click()">📤 رفع</button>
+            <input type="file" id="impEmployees" accept=".xlsx,.xls" style="display:none" onchange="importEmployeesFromExcel(event)">
+          </div>
+        </div>
+      </div>
+      <hr>
       <h4 style="color:var(--danger)">⚠️ منطقة الخطر</h4>
       <p style="color:var(--text-muted);font-size:13px">سيؤدي إعادة الضبط إلى حذف جميع البيانات واستعادة البيانات الافتراضية.</p>
       <button class="btn" style="background:var(--danger);color:#fff" onclick="resetAllData()">🔄 إعادة ضبط المصنع</button>
@@ -524,4 +574,175 @@ function resetUserPerms(userId) {
   localStorage.removeItem('nursery4_userPerms_' + userId);
   showToast('↩️ تم إعادة ضبط الصلاحيات للافتراضي');
   renderPermsTab(document.getElementById('settContent'));
+}
+
+// ============================================================
+// EXCEL IMPORT/EXPORT FUNCTIONS
+// ============================================================
+function xlsxExport(data, filename) {
+  if (typeof XLSX === 'undefined') { showToast('❌ مكتبة Excel غير محملة'); return; }
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, filename + '.xlsx');
+}
+
+function readExcelFile(file, callback) {
+  if (typeof XLSX === 'undefined') { showToast('❌ مكتبة Excel غير محملة'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type:'binary' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      callback(rows);
+    } catch(err) { showToast('❌ خطأ في قراءة الملف'); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function downloadStudentsTemplate() {
+  xlsxExport([{
+    'الكود':'S001','الاسم':'أحمد محمد الرشيد',
+    'الفرع (esh/sol/mat)':'esh','المرحلة (nursery/KG1/KG2)':'KG1',
+    'هاتف 1':'96550001','هاتف 2':'',
+    'تاريخ الميلاد (YYYY-MM-DD)':'2020-03-15',
+    'تاريخ المباشرة (YYYY-MM-DD)':'2023-09-01',
+    'الرسوم':'1200','الخصم':'0','ملاحظات':''
+  }], 'نموذج_الطلاب');
+}
+
+function downloadClothesTemplate() {
+  xlsxExport([{
+    'الكود':'C001','الصنف':'قميص','المقاس':'4 سنوات',
+    'الفرع (esh/sol/mat)':'esh','الكمية':'10','الحد الأدنى':'5'
+  }], 'نموذج_الملابس');
+}
+
+function downloadSuppliesTemplate() {
+  xlsxExport([{
+    'الكود':'P001','الصنف':'صابون يدين','الوحدة':'علبة',
+    'الفرع (esh/sol/mat)':'esh','الكمية':'10',
+    'تاريخ الاستلام (YYYY-MM-DD)':'2025-01-01',
+    'تاريخ الانتهاء (YYYY-MM-DD)':'2026-01-01'
+  }], 'نموذج_المستهلكات');
+}
+
+function downloadEmployeesTemplate() {
+  xlsxExport([{
+    'الكود':'E001','الاسم':'سلمى أحمد','الوظيفة':'معلمة KG1',
+    'الفرع (esh/sol/mat)':'esh','الجنسية':'كويتية',
+    'الهاتف':'96560001','رقم الهوية':'',
+    'الراتب':'450','البدل':'50',
+    'بداية العقد (YYYY-MM-DD)':'2023-09-01',
+    'نهاية العقد (YYYY-MM-DD)':'2026-08-31',
+    'نوع العقد':'دوام كامل','الإجازة السنوية':'30',
+    'الحالة (active/leave/inactive)':'active'
+  }], 'نموذج_الموظفين');
+}
+
+function importStudentsFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  readExcelFile(file, rows => {
+    let added = 0, skipped = 0;
+    const existing = DB.all('students');
+    rows.forEach(r => {
+      const name = r['الاسم']||''; if (!name) { skipped++; return; }
+      const id = String(r['الكود']||'') || DB.nextId('students','S');
+      if (existing.find(s=>s.id===id)) { skipped++; return; }
+      const fees=parseFloat(r['الرسوم'])||0, disc=parseFloat(r['الخصم'])||0;
+      DB.add('students',{
+        id, name,
+        branch:    r['الفرع (esh/sol/mat)']||'esh',
+        grade:     r['المرحلة (nursery/KG1/KG2)']||'KG1',
+        phone1:    String(r['هاتف 1']||''),
+        phone2:    String(r['هاتف 2']||''),
+        dob:       r['تاريخ الميلاد (YYYY-MM-DD)']||'',
+        startDate: r['تاريخ المباشرة (YYYY-MM-DD)']||'',
+        fees, discount:disc, net:Math.max(0,fees-disc), paid:0,
+        notes: r['ملاحظات']||''
+      });
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} طالب${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
+}
+
+function importClothesFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  readExcelFile(file, rows => {
+    let added=0, skipped=0;
+    const existing = DB.all('clothes');
+    rows.forEach(r => {
+      const name=r['الصنف']||''; if(!name){skipped++;return;}
+      const id=String(r['الكود']||'')||DB.nextId('clothes','C');
+      if(existing.find(c=>c.id===id)){skipped++;return;}
+      DB.add('clothes',{
+        id, name,
+        size:   r['المقاس']||'',
+        branch: r['الفرع (esh/sol/mat)']||'esh',
+        qty:    parseInt(r['الكمية'])||0,
+        minQty: parseInt(r['الحد الأدنى'])||5
+      });
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} صنف ملابس${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
+}
+
+function importSuppliesFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  readExcelFile(file, rows => {
+    let added=0, skipped=0;
+    const existing = DB.all('supplies');
+    rows.forEach(r => {
+      const name=r['الصنف']||''; if(!name){skipped++;return;}
+      const id=String(r['الكود']||'')||DB.nextId('supplies','P');
+      if(existing.find(s=>s.id===id)){skipped++;return;}
+      DB.add('supplies',{
+        id, name,
+        unit:        r['الوحدة']||'',
+        branch:      r['الفرع (esh/sol/mat)']||'esh',
+        qty:         parseFloat(r['الكمية'])||0,
+        receiveDate: r['تاريخ الاستلام (YYYY-MM-DD)']||'',
+        expiryDate:  r['تاريخ الانتهاء (YYYY-MM-DD)']||''
+      });
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} مستهلك${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
+}
+
+function importEmployeesFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  readExcelFile(file, rows => {
+    let added=0, skipped=0;
+    const existing = DB.all('employees');
+    rows.forEach(r => {
+      const name=r['الاسم']||''; if(!name){skipped++;return;}
+      const id=String(r['الكود']||'')||DB.nextId('employees','E');
+      if(existing.find(emp=>emp.id===id)){skipped++;return;}
+      DB.add('employees',{
+        id, name,
+        role:          r['الوظيفة']||'',
+        branch:        r['الفرع (esh/sol/mat)']||'esh',
+        nationality:   r['الجنسية']||'',
+        phone:         String(r['الهاتف']||''),
+        idNo:          String(r['رقم الهوية']||''),
+        salary:        parseFloat(r['الراتب'])||0,
+        allowance:     parseFloat(r['البدل'])||0,
+        contractStart: r['بداية العقد (YYYY-MM-DD)']||'',
+        contractEnd:   r['نهاية العقد (YYYY-MM-DD)']||'',
+        contractType:  r['نوع العقد']||'دوام كامل',
+        annualLeave:   parseInt(r['الإجازة السنوية'])||21,
+        status:        r['الحالة (active/leave/inactive)']||'active'
+      });
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
 }
