@@ -576,7 +576,7 @@ function pkBuildLog(branch) {
         <td>${fmtDate(d.date)}</td>
         <td>${BRANCHES[d.branch]?.name||d.branch}</td>
         <td><b>${d.childName}</b></td><td>${d.stage}</td>
-        <td>${d.type}</td><td>${d.qty}</td>
+        <td>${d.type}</td><td>${d.size||'—'}</td><td>${d.qty}</td>
       </tr>`).join('')
     : `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد سجلات</td></tr>`;
   const title = branch ? `سجل صرف فرع ${BRANCHES[branch]?.name}` : 'سجل الصرف — جميع الفروع';
@@ -590,7 +590,7 @@ function pkBuildLog(branch) {
       </div>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>التاريخ</th><th>الفرع</th><th>اسم الطفل/ة</th><th>المرحلة</th><th>النوع</th><th>الكمية</th></tr></thead>
+      <thead><tr><th>التاريخ</th><th>الفرع</th><th>اسم الطفل/ة</th><th>المرحلة</th><th>النوع</th><th>المقاس</th><th>الكمية</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div></div>`;
 }
@@ -657,6 +657,14 @@ function pkBuildDispatchForm() {
         <select id="pkd-stage" class="form-control">${stageOpts}</select></div>
       <div class="form-group" style="margin:0"><label>نوع القطعة *</label>
         <select id="pkd-type" class="form-control">${typeOpts}</select></div>
+      <div class="form-group" style="margin:0"><label>المقاس</label>
+        <select id="pkd-size" class="form-control">
+          <option value="">— اختر المقاس —</option>
+          <option>2 سنوات</option><option>3 سنوات</option>
+          <option>4 سنوات</option><option>5 سنوات</option>
+          <option>6 سنوات</option><option>7 سنوات</option>
+          <option>8 سنوات</option>
+        </select></div>
       <div class="form-group" style="margin:0"><label>الكمية</label>
         <input id="pkd-qty" type="number" class="form-control" value="1" min="1"></div>
       <div class="form-group" style="margin:0"><label>التاريخ</label>
@@ -673,6 +681,7 @@ function pkSubmitDispatch() {
   const child = document.getElementById('pkd-child')?.value.trim();
   const stage = document.getElementById('pkd-stage')?.value;
   const type  = document.getElementById('pkd-type')?.value;
+  const size  = document.getElementById('pkd-size')?.value || '';
   const qty   = parseInt(document.getElementById('pkd-qty')?.value)||0;
   const date  = document.getElementById('pkd-date')?.value;
   if (!child) { showToast('⚠️ أدخل اسم الطفل/ة'); return; }
@@ -683,7 +692,7 @@ function pkSubmitDispatch() {
   bs[idx].qty -= qty;
   invSaveBranch(bs);
   const log = invGetDispatch();
-  log.push({id:`D${Date.now()}`, branch:b, childName:child, stage, type, qty, date});
+  log.push({id:`D${Date.now()}`, branch:b, childName:child, stage, type, size, qty, date});
   invSaveDispatch(log);
   const msg = document.getElementById('pk-dispatch-msg');
   if (msg) msg.innerHTML = `<div style="padding:10px 14px;border-radius:8px;background:#f0fdf4;color:#166534;border:1px solid #86efac;font-size:13px">✅ تم صرف ${qty} قطعة من ${type} للطفل/ة ${child}</div>`;
@@ -1363,14 +1372,14 @@ function pkPrintRequestsReport() {
 function pkExportLogExcel(branch) {
   let log = invGetDispatch();
   if (branch) log = log.filter(d=>d.branch===branch);
-  const data = log.map(d => ({'اسم الطفل': d.childName||'—', 'المرحلة': d.stage||'—', 'النوع': d.type, 'الكمية': d.qty, 'الفرع': BRANCHES[d.branch]?.name||d.branch, 'التاريخ': fmtDate(d.date)||'—'}));
+  const data = log.map(d => ({'اسم الطفل': d.childName||'—', 'المرحلة': d.stage||'—', 'النوع': d.type, 'المقاس': d.size||'—', 'الكمية': d.qty, 'الفرع': BRANCHES[d.branch]?.name||d.branch, 'التاريخ': fmtDate(d.date)||'—'}));
   xlsxExport(data, 'سجل_صرف_الملابس');
 }
 function pkPrintLogReport(branch) {
   let log = invGetDispatch();
   if (branch) log = log.filter(d=>d.branch===branch);
-  const rows = log.map(d => [d.childName||'—', d.stage||'—', d.type, d.qty, BRANCHES[d.branch]?.name||d.branch, fmtDate(d.date)||'—']);
-  printReport('سجل صرف الملابس', ['اسم الطفل','المرحلة','النوع','الكمية','الفرع','التاريخ'], rows);
+  const rows = log.map(d => [d.childName||'—', d.stage||'—', d.type, d.size||'—', d.qty, BRANCHES[d.branch]?.name||d.branch, fmtDate(d.date)||'—']);
+  printReport('سجل صرف الملابس', ['اسم الطفل','المرحلة','النوع','المقاس','الكمية','الفرع','التاريخ'], rows);
 }
 function pkExportBranchStockExcel() {
   const b = invBranchKey();
