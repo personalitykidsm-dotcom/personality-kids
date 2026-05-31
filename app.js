@@ -282,7 +282,7 @@ function renderDashboard() {
   // Branch summary table
   const isAdmin = currentUser && currentUser.role === 'admin';
   const branches = isAdmin
-    ? (currentBranch === 'all' ? ['esh','sol','mat'] : [currentBranch])
+    ? (currentBranch === 'all' ? ['esh','sol','mat','esh_e','sol_e','mat_e'] : [currentBranch])
     : [currentUser.branch];
 
   const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => s.branch === currentUser.branch);
@@ -338,6 +338,9 @@ function renderStudents() {
     <span class="filter-chip ${currentBranch==='esh'?'active':''}" onclick="setBranchFilter('esh',this)">اشبيلية</span>
     <span class="filter-chip ${currentBranch==='sol'?'active':''}" onclick="setBranchFilter('sol',this)">الصليبخات</span>
     <span class="filter-chip ${currentBranch==='mat'?'active':''}" onclick="setBranchFilter('mat',this)">المطلاع</span>
+    <span class="filter-chip ${currentBranch==='esh_e'?'active':''}" onclick="setBranchFilter('esh_e',this)">اشبيلية مسائي</span>
+    <span class="filter-chip ${currentBranch==='sol_e'?'active':''}" onclick="setBranchFilter('sol_e',this)">الصليبخات مسائي</span>
+    <span class="filter-chip ${currentBranch==='mat_e'?'active':''}" onclick="setBranchFilter('mat_e',this)">المطلاع مسائي</span>
     <span class="filter-chip" id="gradeAll" onclick="gradeFilter('all',this)">كل المراحل</span>
     <span class="filter-chip" onclick="gradeFilter('nursery',this)">حضانة</span>
     <span class="filter-chip" onclick="gradeFilter('KG1',this)">KG1</span>
@@ -467,17 +470,3 @@ function deleteStudent(id, name) {
   DB.remove('students', id);
   const remaining = DB.all('installments').filter(i => i.studentId !== id);
   DB.save('installments', remaining);
-  showToast('🗑️ تم حذف الطالب: ' + name);
-  renderStudentsTable(activeGrade);
-}
-// openStudentInstallments defined in app-students.js
-// exportStudentsExcel defined in app-students.js
-function renderFees()    {}
-function renderReports() {}
-function renderClothes() {}
-function renderSupplies(){}
-function renderMessages(){}
-function renderAutoreply(){}
-function renderHR()      {}
-function renderLicenses(){}
-function renderSettings(){}

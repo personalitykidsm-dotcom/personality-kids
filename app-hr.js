@@ -135,7 +135,7 @@ function deleteEmployee(id) {
 
 // ===== ADD EMPLOYEE MODAL =====
 function openAddEmployee() {
-  const branchOpts = ['esh','sol','mat'].map(b =>
+  const branchOpts = ['esh','sol','mat','esh_e','sol_e','mat_e'].map(b =>
     `<option value="${b}">${BRANCHES[b].name}</option>`).join('');
 
   document.getElementById('modals').innerHTML = `
@@ -405,5 +405,4 @@ function printSalaryReport() {
   printReport('كشف الرواتب',
     ['الموظف','الفرع','الراتب','البدلات','الصافي'],
     data.map(e => [e.name, BRANCHES[e.branch].name,
-      fmtKD(e.salary), fmtKD(e.allowance), fmtKD((e.salary||0)+(e.allowance||0))]));
-}
+      fmtKD(e.salary), fmtKD(e.allowance), fmtKD((e.salary||0)+

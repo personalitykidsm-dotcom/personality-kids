@@ -6,10 +6,13 @@ const SUPABASE_URL = 'https://idtopctbogyaciasftza.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkdG9wY3Rib2d5YWNpYXNmdHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzE0NTUsImV4cCI6MjA5NTEwNzQ1NX0.DG6e0Fh7oHC5A588Jhupcs6yVb91D_vfKKwN60FUdiQ';
 
 const BRANCHES = {
-  all: { name: 'كل الفروع',   badge: 'badge-gray'   },
-  esh: { name: 'اشبيلية',     badge: 'badge-green'  },
-  sol: { name: 'الصليبخات',   badge: 'badge-blue'   },
-  mat: { name: 'المطلاع',     badge: 'badge-purple' }
+  all:   { name: 'كل الفروع',          badge: 'badge-gray'   },
+  esh:   { name: 'اشبيلية',            badge: 'badge-green'  },
+  sol:   { name: 'الصليبخات',          badge: 'badge-blue'   },
+  mat:   { name: 'المطلاع',            badge: 'badge-purple' },
+  esh_e: { name: 'اشبيلية مسائي',      badge: 'badge-green'  },
+  sol_e: { name: 'الصليبخات مسائي',    badge: 'badge-blue'   },
+  mat_e: { name: 'المطلاع مسائي',      badge: 'badge-purple' }
 };
 
 const ROLES_HR = [
@@ -276,8 +279,4 @@ function empStatus(e){
   return                         {label:'غير نشط',cls:'badge-red'};
 }
 function licenseStatus(l){
-  const d=daysUntil(l.expiryDate||l.expiry_date);
-  if(d<0)  return {label:'منتهي',       cls:'badge-red',   card:'lc-danger'};
-  if(d<60) return {label:'ينتهي قريباً',cls:'badge-orange',card:'lc-warning'};
-  return          {label:'ساري',        cls:'badge-green', card:'lc-good'};
-}
+  const d=daysUntil(l.expiryDate||l.exp

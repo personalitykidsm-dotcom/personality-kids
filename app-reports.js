@@ -289,7 +289,7 @@ function invGetMainStock()   {
   return DB.get('invMainStock') || invGetTypes().map((t,i) => ({type:t, qty:80+i*15}));
 }
 function invGetBranchStock() {
-  return DB.get('invBranchStock') || ['esh','sol','mat'].flatMap(b =>
+  return DB.get('invBranchStock') || ['esh','sol','mat','esh_e','sol_e','mat_e'].flatMap(b =>
     invGetTypes().map((t,i) => ({type:t, branch:b, qty:20+i*3, minQty:INV_MIN_QTY}))
   );
 }
@@ -366,7 +366,7 @@ function pkBuildAdminDash() {
   const pend = requests.filter(r=>r.status==='pending').length;
   const alerts = main.filter(i=>i.qty<INV_MIN_QTY)
     .map(i=>`<div style="padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:6px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e">⚠️ ${i.type}: متبقي ${i.qty} قطعة فقط</div>`).join('');
-  const fills = ['esh','sol','mat'].map(b=>{
+  const fills = ['esh','sol','mat','esh_e','sol_e','mat_e'].map(b=>{
     const tot = branch.filter(x=>x.branch===b).reduce((s,i)=>s+i.qty,0);
     const cap = invGetTypes().length * 30;
     const pct = Math.min(100, Math.round(tot/cap*100));
@@ -521,7 +521,7 @@ function pkSaveNewType() {
   const main = invGetMainStock(); main.push({type:name, qty});
   invSaveMain(main);
   const branch = invGetBranchStock();
-  ['esh','sol','mat'].forEach(b => branch.push({type:name, branch:b, qty:0, minQty:INV_MIN_QTY}));
+  ['esh','sol','mat','esh_e','sol_e','mat_e'].forEach(b => branch.push({type:name, branch:b, qty:0, minQty:INV_MIN_QTY}));
   invSaveBranch(branch);
   closeModal('modal-inv-type');
   pkShowTab('pkmain');
@@ -535,7 +535,7 @@ function pkBuildBranches() {
     <button class="btn btn-outline btn-sm" onclick="pkExportBranchesExcel()">📥 Excel</button>
     <button class="btn btn-outline btn-sm" onclick="pkPrintBranchesReport()">🖨️ PDF</button>
   </div>`;
-  const cards = ['esh','sol','mat'].map(b => {
+  const cards = ['esh','sol','mat','esh_e','sol_e','mat_e'].map(b => {
     const bStock = stock.filter(x=>x.branch===b);
     const tot = bStock.reduce((s,i)=>s+i.qty,0);
     const rows = bStock.map(i => {
@@ -902,6 +902,7 @@ function supBuildInventory(branch) {
     ? `<select id="supBranchFilter" onchange="supBuildInventoryInplace(this.value)" class="form-control" style="max-width:170px">
         <option value="all">كل الفروع</option>
         <option value="esh">اشبيلية</option><option value="sol">الصليبخات</option><option value="mat">المطلاع</option>
+        <option value="esh_e">اشبيلية مسائي</option><option value="sol_e">الصليبخات مسائي</option><option value="mat_e">المطلاع مسائي</option>
       </select>` : '';
 
   return `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
@@ -1549,6 +1550,4 @@ function supExportLogExcel(branch) {
 function supPrintLogReport(branch) {
   let log = supGetDispatchLog();
   if (branch) log = log.filter(d=>d.branch===branch);
-  const rows = log.map(d => [d.itemName||'—', d.unit||'—', d.qty, BRANCHES[d.branch]?.name||d.branch, d.purpose||'—', fmtDate(d.date)||'—']);
-  printReport('سجل صرف المستهلكات', ['الصنف','الوحدة','الكمية','الفرع','الغرض','التاريخ'], rows);
-}
+  const rows = log.map(

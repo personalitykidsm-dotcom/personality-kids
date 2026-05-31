@@ -91,6 +91,9 @@ function renderSettings() {
               <option value="esh">اشبيلية</option>
               <option value="sol">الصليبخات</option>
               <option value="mat">المطلاع</option>
+              <option value="esh_e">اشبيلية مسائي</option>
+              <option value="sol_e">الصليبخات مسائي</option>
+              <option value="mat_e">المطلاع مسائي</option>
             </select>
           </div>
           <div class="form-group">
@@ -732,11 +735,4 @@ function importEmployeesFromExcel(e) {
         contractEnd:   r['نهاية العقد (YYYY-MM-DD)']||'',
         contractType:  r['نوع العقد']||'دوام كامل',
         annualLeave:   parseInt(r['الإجازة السنوية'])||21,
-        status:        r['الحالة (active/leave/inactive)']||'active'
-      });
-      added++;
-    });
-    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
-    e.target.value='';
-  });
-}
+        status:     
