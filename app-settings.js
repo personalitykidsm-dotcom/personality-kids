@@ -737,4 +737,9 @@ function importEmployeesFromExcel(e) {
         annualLeave:   parseInt(r['الإجازة السنوية'])||21,
         status:        r['الحالة (active/leave/inactive)']||'active'
       });
-      ad
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
+}
