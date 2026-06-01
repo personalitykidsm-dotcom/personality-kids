@@ -268,6 +268,9 @@ function renderReports() {
           <span class="filter-chip" onclick="repBranch(this,'esh')">اشبيلية</span>
           <span class="filter-chip" onclick="repBranch(this,'sol')">الصليبخات</span>
           <span class="filter-chip" onclick="repBranch(this,'mat')">المطلاع</span>
+          <span class="filter-chip" onclick="repBranch(this,'esh_e')">اشبيلية مسائي</span>
+          <span class="filter-chip" onclick="repBranch(this,'sol_e')">الصليبخات مسائي</span>
+          <span class="filter-chip" onclick="repBranch(this,'mat_e')">المطلاع مسائي</span>
           <input type="date" id="repFrom" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
           <input type="date" id="repTo"   style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
         </div>
@@ -340,44 +343,57 @@ function repTab(el, id) {
 }
 
 function renderPaymentsReport(branchF) {
-  const installs = DB.all('installments').filter(i => i.status === 'paid');
+  const fromDate = document.getElementById('repFrom')?.value || '';
+  const toDate   = document.getElementById('repTo')?.value   || '';
   const students = DB.all('students');
-  const rows = installs.map(i => {
+  const allInsts = DB.all('installments').filter(i => i.status === 'paid' || i.status === 'partial');
+
+  // for supervisor: restrict to own branch
+  const userBranch = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' ? null : currentUser?.branch;
+
+  const rows = allInsts.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
+    if (userBranch && s.branch !== userBranch) return '';
     if (branchF !== 'all' && s.branch !== branchF) return '';
+    if (fromDate && (i.paidDate||'') < fromDate) return '';
+    if (toDate   && (i.paidDate||'') > toDate)   return '';
+    const amt = i.partialPaid || i.amount;
     return `<tr>
       <td><b>${s.name}</b></td>
-      <td><span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span></td>
+      <td><span class="badge ${BRANCHES[s.branch]?.badge||'badge-gray'}">${BRANCHES[s.branch]?.name||s.branch}</span></td>
       <td>${fmtDate(i.paidDate)}</td>
-      <td><b>${fmtKD(i.amount)}</b></td>
+      <td><b>${fmtKD(amt)}</b></td>
       <td>${i.method||'—'}</td>
-      <td>قسط ${i.num}</td>
+      <td>${i.note||'—'}</td>
+      <td>قسط ${i.num||1}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد مدفوعات</td></tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد مدفوعات</td></tr>`;
 
   document.getElementById('repPayTable').innerHTML = `
-    <thead><tr><th>الطالب</th><th>الفرع</th><th>تاريخ الدفع</th><th>المبلغ</th><th>الطريقة</th><th>القسط</th></tr></thead>
+    <thead><tr><th>الطالب</th><th>الفرع</th><th>تاريخ الدفع</th><th>المبلغ</th><th>الطريقة</th><th>البيان</th><th>القسط</th></tr></thead>
     <tbody>${rows}</tbody>`;
 }
 
 function renderPlanReport() {
+  const userBranch = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' ? null : currentUser?.branch;
   const installs = DB.all('installments');
   const students = DB.all('students');
   const rows = installs.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
-    const late    = i.status === 'pending' && daysUntil(i.dueDate) < 0;
-    const badge   = i.status === 'paid' ? 'badge-green' : late ? 'badge-red' : 'badge-orange';
-    const label   = i.status === 'paid' ? 'مدفوع' : late ? 'متأخر' : 'قادم';
+    if (userBranch && s.branch !== userBranch) return '';
+    const late  = i.status === 'pending' && daysUntil(i.dueDate) < 0;
+    const badge = i.status === 'paid' ? 'badge-green' : i.status === 'partial' ? 'badge-blue' : late ? 'badge-red' : 'badge-orange';
+    const label = i.status === 'paid' ? 'مدفوع' : i.status === 'partial' ? `جزئي (${fmtKD(i.partialPaid||0)})` : late ? 'متأخر' : 'قادم';
     return `<tr>
       <td><b>${s.name}</b></td>
-      <td><span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span></td>
-      <td>قسط ${i.num}</td><td>${fmtKD(i.amount)}</td>
+      <td><span class="badge ${BRANCHES[s.branch]?.badge||'badge-gray'}">${BRANCHES[s.branch]?.name||s.branch}</span></td>
+      <td>قسط ${i.num||1}</td><td>${fmtKD(i.amount)}</td>
       <td>${fmtDate(i.dueDate)}</td><td>${fmtDate(i.paidDate)}</td>
       <td><span class="badge ${badge}">${label}</span></td>
     </tr>`;
-  }).join('');
+  }).join('') || `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>`;
   document.getElementById('repPlanTable').innerHTML = `
     <thead><tr><th>الطالب</th><th>الفرع</th><th>القسط</th><th>المبلغ</th><th>الاستحقاق</th><th>الدفع</th><th>الحالة</th></tr></thead>
     <tbody>${rows}</tbody>`;
@@ -410,7 +426,7 @@ function invSaveBranch(d)    { DB.set('invBranchStock', d); }
 function invSaveDispatch(d)  { DB.set('invDispatch', d); }
 function invSaveRequests(d)  { DB.set('invRequests', d); }
 
-function invIsAdmin()   { return currentUser?.role === 'admin'; }
+function invIsAdmin()   { return currentUser?.role === 'admin' || currentUser?.role === 'super_admin'; }
 function invBranchKey() { return currentUser?.branch || 'esh'; }
 function invBranchName(){ return BRANCHES[invBranchKey()]?.name || '—'; }
 
