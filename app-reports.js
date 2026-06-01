@@ -1550,4 +1550,6 @@ function supExportLogExcel(branch) {
 function supPrintLogReport(branch) {
   let log = supGetDispatchLog();
   if (branch) log = log.filter(d=>d.branch===branch);
-  const rows = log.map(
+  const rows = log.map(d => [d.itemName||'—', d.unit||'—', d.qty, BRANCHES[d.branch]?.name||d.branch, d.purpose||'—', fmtDate(d.date)||'—']);
+  printReport('سجل صرف المستهلكات', ['الصنف','الوحدة','الكمية','الفرع','الغرض','التاريخ'], rows);
+}

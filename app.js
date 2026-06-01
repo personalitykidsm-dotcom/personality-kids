@@ -54,28 +54,27 @@ function saveGrades(arr) {
 // LOGIN
 // ============================================================
 function initLogin() {
-  const users = DB.all('users');
-  const sel   = document.getElementById('loginUser');
-  sel.innerHTML = users.map(u =>
-    `<option value="${u.id}">${u.name}</option>`
-  ).join('');
-
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('loginPIN').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
   });
+  document.getElementById('loginUser').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('loginPIN').focus();
+  });
 }
 
 function doLogin() {
-  const userId = document.getElementById('loginUser').value;
-  const pin    = document.getElementById('loginPIN').value;
-  const errEl  = document.getElementById('loginError');
-  const users  = DB.all('users');
-  const user   = users.find(u => u.id === userId);
+  const userName = document.getElementById('loginUser').value.trim();
+  const pin      = document.getElementById('loginPIN').value;
+  const errEl    = document.getElementById('loginError');
+  const users    = DB.all('users');
+  const user     = users.find(u => u.name === userName);
 
   errEl.textContent = '';
+  if (!userName)       { errEl.textContent = 'أدخل اسم المستخدم'; return; }
   if (!pin)            { errEl.textContent = 'أدخل الرقم السري'; return; }
-  if (!user || user.pin !== pin) { errEl.textContent = '❌ الرقم السري غير صحيح'; return; }
+  if (!user)           { errEl.textContent = '❌ اسم المستخدم غير موجود'; return; }
+  if (user.pin !== pin){ errEl.textContent = '❌ الرقم السري غير صحيح'; return; }
 
   currentUser   = user;
   currentBranch = user.branch === 'all' ? 'all' : user.branch;
@@ -470,3 +469,17 @@ function deleteStudent(id, name) {
   DB.remove('students', id);
   const remaining = DB.all('installments').filter(i => i.studentId !== id);
   DB.save('installments', remaining);
+  showToast('🗑️ تم حذف الطالب: ' + name);
+  renderStudentsTable(activeGrade);
+}
+// openStudentInstallments defined in app-students.js
+// exportStudentsExcel defined in app-students.js
+function renderFees()    {}
+function renderReports() {}
+function renderClothes() {}
+function renderSupplies(){}
+function renderMessages(){}
+function renderAutoreply(){}
+function renderHR()      {}
+function renderLicenses(){}
+function renderSettings(){}

@@ -279,4 +279,8 @@ function empStatus(e){
   return                         {label:'غير نشط',cls:'badge-red'};
 }
 function licenseStatus(l){
-  const d=daysUntil(l.expiryDate||l.exp
+  const d=daysUntil(l.expiryDate||l.expiry_date);
+  if(d<0)  return {label:'منتهي',       cls:'badge-red',   card:'lc-danger'};
+  if(d<60) return {label:'ينتهي قريباً',cls:'badge-orange',card:'lc-warning'};
+  return          {label:'ساري',        cls:'badge-green', card:'lc-good'};
+}

@@ -405,4 +405,5 @@ function printSalaryReport() {
   printReport('كشف الرواتب',
     ['الموظف','الفرع','الراتب','البدلات','الصافي'],
     data.map(e => [e.name, BRANCHES[e.branch].name,
-      fmtKD(e.salary), fmtKD(e.allowance), fmtKD((e.salary||0)+
+      fmtKD(e.salary), fmtKD(e.allowance), fmtKD((e.salary||0)+(e.allowance||0))]));
+}

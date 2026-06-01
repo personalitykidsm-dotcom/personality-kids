@@ -735,4 +735,11 @@ function importEmployeesFromExcel(e) {
         contractEnd:   r['نهاية العقد (YYYY-MM-DD)']||'',
         contractType:  r['نوع العقد']||'دوام كامل',
         annualLeave:   parseInt(r['الإجازة السنوية'])||21,
-        status:     
+        status:        r['الحالة (active/leave/inactive)']||'active'
+      });
+      added++;
+    });
+    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
+    e.target.value='';
+  });
+}
