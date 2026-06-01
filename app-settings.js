@@ -605,7 +605,7 @@ function downloadStudentsTemplate() {
     'هاتف 1':'96550001','هاتف 2':'',
     'تاريخ الميلاد (YYYY-MM-DD)':'2020-03-15',
     'تاريخ المباشرة (YYYY-MM-DD)':'2023-09-01',
-    'الرسوم':'1200','الخصم':'0','ملاحظات':''
+    'الرسوم':'1200','الخصم':'0','المسدد':'0','ملاحظات':''
   }], 'نموذج_الطلاب');
 }
 
@@ -648,6 +648,8 @@ function importStudentsFromExcel(e) {
       const id = String(r['الكود']||'') || DB.nextId('students','S');
       if (existing.find(s=>s.id===id)) { skipped++; return; }
       const fees=parseFloat(r['الرسوم'])||0, disc=parseFloat(r['الخصم'])||0;
+      const net = Math.max(0, fees - disc);
+      const paid = Math.min(parseFloat(r['المسدد'])||0, net);
       DB.add('students',{
         id, name,
         branch:    r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
@@ -656,8 +658,18 @@ function importStudentsFromExcel(e) {
         phone2:    String(r['هاتف 2']||''),
         dob:       r['تاريخ الميلاد (YYYY-MM-DD)']||'',
         startDate: r['تاريخ المباشرة (YYYY-MM-DD)']||'',
-        fees, discount:disc, net:Math.max(0,fees-disc), paid:0,
+        fees, discount:disc, net, paid,
         notes: r['ملاحظات']||''
+      });
+      // auto-create one installment
+      const instStatus = paid >= net ? 'paid' : paid > 0 ? 'partial' : 'pending';
+      const instId2 = DB.nextId('installments','I');
+      DB.add('installments',{
+        id: instId2, studentId: id, num:1,
+        amount: net, partialPaid: paid,
+        dueDate: r['تاريخ المباشرة (YYYY-MM-DD)']||'',
+        paidDate: paid > 0 ? new Date().toISOString().split('T')[0] : '',
+        status: instStatus, method: paid > 0 ? 'نقدي' : ''
       });
       added++;
     });
