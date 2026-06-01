@@ -257,7 +257,8 @@ function renderReports() {
   document.getElementById('reportsTabs').innerHTML = `
     <button class="tab active" onclick="repTab(this,'rep-payments')">📋 المدفوعات</button>
     <button class="tab" onclick="repTab(this,'rep-plan')">📅 خطة الأقساط</button>
-    <button class="tab" onclick="repTab(this,'rep-student')">🔍 بحث عن طالب</button>`;
+    <button class="tab" onclick="repTab(this,'rep-student')">🔍 بحث عن طالب</button>
+    <button class="tab" onclick="repTab(this,'rep-daily')">📄 التقرير اليومي</button>`;
 
   document.getElementById('reportsContent').innerHTML = `
     <div id="rep-payments">
@@ -283,6 +284,14 @@ function renderReports() {
         <button class="btn btn-outline" onclick="printPlanReport()">🖨️ PDF</button>
       </div>
       <div class="card"><div class="table-wrap"><table id="repPlanTable"></table></div></div>
+    </div>
+    <div id="rep-daily" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <input type="date" id="dailyDate" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary" onclick="renderDailyReport()">🔍 عرض</button>
+        <button class="btn btn-outline" onclick="printDailyReport()">🖨️ طباعة</button>
+      </div>
+      <div id="dailyReportContent"></div>
     </div>
     <div id="rep-student" style="display:none">
       <div class="card">
@@ -322,7 +331,12 @@ function repTab(el, id) {
   document.getElementById('rep-payments').style.display = id === 'rep-payments' ? '' : 'none';
   document.getElementById('rep-plan').style.display     = id === 'rep-plan'     ? '' : 'none';
   document.getElementById('rep-student').style.display  = id === 'rep-student'  ? '' : 'none';
-  if (id === 'rep-plan') renderPlanReport();
+  document.getElementById('rep-daily').style.display    = id === 'rep-daily'    ? '' : 'none';
+  if (id === 'rep-plan')  renderPlanReport();
+  if (id === 'rep-daily') {
+    document.getElementById('dailyDate').value = new Date().toISOString().split('T')[0];
+    renderDailyReport();
+  }
 }
 
 function renderPaymentsReport(branchF) {
@@ -1647,3 +1661,109 @@ function supPrintLogReport(branch) {
   const rows = log.map(d => [d.itemName||'—', d.unit||'—', d.qty, BRANCHES[d.branch]?.name||d.branch, d.purpose||'—', fmtDate(d.date)||'—']);
   printReport('سجل صرف المستهلكات', ['الصنف','الوحدة','الكمية','الفرع','الغرض','التاريخ'], rows);
 }
+
+// ============================================================
+// DAILY REPORT — التقرير اليومي التحصيلي
+// ============================================================
+function renderDailyReport() {
+  const date     = document.getElementById('dailyDate').value;
+  if (!date) return;
+  const branch   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
+                   ? (currentBranch === 'all' ? null : currentBranch)
+                   : currentUser?.branch;
+  const branchName = branch ? (BRANCHES[branch]?.name || branch) : 'كل الفروع';
+  const students = DB.all('students');
+  const installs = DB.all('installments').filter(i => {
+    if (i.status !== 'paid' && i.status !== 'partial') return false;
+    if ((i.paidDate || '').slice(0,10) !== date) return false;
+    if (branch) {
+      const s = students.find(x => x.id === i.studentId);
+      if (!s || s.branch !== branch) return false;
+    }
+    return true;
+  });
+
+  // totals by method
+  const totals = { 'نقدي':0, 'برنامج':0, 'كي نت':0, 'رابط':0 };
+  installs.forEach(i => {
+    const amt = i.partialPaid || i.amount || 0;
+    const m = (i.method||'').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','');
+    const key = m.includes('برنامج')||m.includes('📱') ? 'برنامج'
+              : m.includes('كي نت')||m.includes('💳') ? 'كي نت'
+              : m.includes('رابط')||m.includes('🔗') ? 'رابط' : 'نقدي';
+    totals[key] = (totals[key]||0) + parseFloat(amt);
+  });
+  const total = Object.values(totals).reduce((a,b)=>a+b,0);
+
+  const rows = installs.map((i, idx) => {
+    const s   = students.find(x => x.id === i.studentId);
+    const amt = parseFloat(i.partialPaid || i.amount || 0);
+    const m   = (i.method||'نقدي').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','');
+    return `<tr>
+      <td style="text-align:center">${idx+1}</td>
+      <td>${s?.name||'—'}</td>
+      <td>${i.note||'—'}</td>
+      <td style="text-align:center">${fmtKD(amt)}</td>
+      <td style="text-align:center">${m}</td>
+      <td style="text-align:center">${i.id||'—'}</td>
+      <td style="text-align:center">${fmtDate(s?.startDate||'')}</td>
+      <td></td>
+    </tr>`;
+  }).join('');
+
+  const dateAr = new Date(date).toLocaleDateString('ar-KW',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  document.getElementById('dailyReportContent').innerHTML = `
+    <div id="dailyPrintArea" style="font-family:inherit;direction:rtl">
+      <div style="text-align:center;margin-bottom:8px">
+        <h3 style="margin:0">التقرير التحصيلي اليومي — فرع ${branchName}</h3>
+        <p style="margin:4px 0;font-size:13px">اليوم: ${dateAr}</p>
+      </div>
+      ${installs.length === 0
+        ? '<p style="text-align:center;color:var(--text-muted);padding:30px">لا توجد مدفوعات في هذا اليوم</p>'
+        : `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--primary);color:#fff">
+            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">م</th>
+            <th style="border:1px solid #ccc;padding:6px 8px">الاسم</th>
+            <th style="border:1px solid #ccc;padding:6px 8px">البيانات</th>
+            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">المبلغ</th>
+            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">طريقة الدفع</th>
+            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">رقم السند</th>
+            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">المباشرة</th>
+            <th style="border:1px solid #ccc;padding:6px 8px">الملاحظات</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;margin-top:20px;gap:16px;flex-wrap:wrap">
+        <table style="border-collapse:collapse;font-size:13px;min-width:220px">
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد نقداً</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">${fmtKD(totals['نقدي'])}</td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['رابط'])}</td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['كي نت'])}</td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['برنامج'])}</td></tr>
+          <tr style="font-weight:bold;background:#f0f0f0"><td style="border:1px solid #ccc;padding:6px 12px">الإجمالي</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(total)}</td></tr>
+        </table>
+        <table style="border-collapse:collapse;font-size:13px;min-width:240px">
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">اسم الموظفة</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">اسم مستلم الكاش</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
+          <tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+function printDailyReport() {
+  const area = document.getElementById('dailyPrintArea');
+  if (!area) { showToast('⚠️ اعرض التقرير أولاً'); return; }
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+    <style>body{font-family:Arial,sans-serif;direction:rtl;padding:20px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px 8px}
+    th{background:#1a5c42;color:#fff}@media print{button{display:none}}</style>
+    </head><body>${area.innerHTML}<br><button onclick="window.print()">🖨️ طباعة</button></body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+}
+
