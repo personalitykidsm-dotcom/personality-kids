@@ -100,7 +100,7 @@ function doLogin() {
   };
 
   // save last login
-  DB.update('users', userId, { lastLogin: new Date().toLocaleString('ar-KW') });
+  DB.update('users', user.id, { lastLogin: new Date().toLocaleString('ar-KW') });
 
   // apply nav visibility based on permissions
   applyNavPermissions(user);
