@@ -127,19 +127,35 @@ function renderFeesTable(statusFilter) {
 
 function loadStudentInstalls() {
   const sid   = document.getElementById('payStudent').value;
-  const insts = DB.all('installments').filter(i => i.studentId === sid && i.status === 'pending');
-  document.getElementById('payInst').innerHTML =
+  const insts = DB.all('installments').filter(i => i.studentId === sid && (i.status === 'pending' || i.status === 'partial'));
+  const sel   = document.getElementById('payInst');
+  sel.innerHTML =
     `<option value="">-- اختر القسط --</option>` +
-    insts.map(i => `<option value="${i.id}">قسط ${i.num} — ${fmtKD(i.amount)} — ${fmtDate(i.dueDate)}</option>`).join('');
+    insts.map(i => {
+      const remaining = i.amount - (i.partialPaid || 0);
+      const label = insts.length === 1
+        ? `المبلغ: ${fmtKD(i.amount)} — المتبقي: ${fmtKD(remaining)}`
+        : `قسط ${i.num} — ${fmtKD(i.amount)} — المتبقي: ${fmtKD(remaining)}`;
+      return `<option value="${i.id}">${label}</option>`;
+    }).join('');
+
+  // auto-select if only one installment
+  if (insts.length === 1) {
+    sel.value = insts[0].id;
+    const rem = insts[0].amount - (insts[0].partialPaid || 0);
+    document.getElementById('payAmt').value = rem.toFixed(3);
+  }
 
   const s = DB.all('students').find(x => x.id === sid);
   if (s) {
+    const remaining = s.net - s.paid;
     document.getElementById('payStudentPlan').innerHTML =
       `<div style="text-align:right">
         <p><b>الطالب:</b> ${s.name}</p>
         <p><b>الصافي:</b> ${fmtKD(s.net)}</p>
         <p><b>المدفوع:</b> <span style="color:var(--primary)">${fmtKD(s.paid)}</span></p>
-        <p><b>المتبقي:</b> <span style="color:var(--danger)">${fmtKD(s.net-s.paid)}</span></p>
+        <p><b>المتبقي:</b> <span style="color:${remaining > 0 ? 'var(--danger)' : 'var(--primary)'}">${fmtKD(remaining)}</span></p>
+        ${remaining <= 0 ? '<p style="color:var(--primary);font-weight:bold">✅ مكتمل السداد</p>' : ''}
       </div>`;
   }
 }
