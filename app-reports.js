@@ -45,12 +45,17 @@ function renderFees() {
             <input type="date" id="payDate" value="${new Date().toISOString().split('T')[0]}">
           </div>
           <div class="form-group"><label>طريقة الدفع</label>
-            <div class="pay-method">
+            <div class="pay-method" id="payMethodChips">
               <div class="pay-chip selected" onclick="selPay(this)">💵 نقدي</div>
               <div class="pay-chip" onclick="selPay(this)">📱 برنامج</div>
               <div class="pay-chip" onclick="selPay(this)">💳 كي نت</div>
               <div class="pay-chip" onclick="selPay(this)">🔗 رابط</div>
             </div>
+          </div>
+          <div class="form-group"><label>إيصال الدفع (صورة)</label>
+            <input type="file" id="payReceiptFees" accept="image/*" onchange="previewFeeReceipt(this)"
+              style="font-size:13px">
+            <div id="payReceiptFeesPreview" style="margin-top:8px"></div>
           </div>
           <button class="btn btn-primary" style="width:100%" onclick="registerPayment()">💾 تسجيل الدفعة</button>
         </div>
@@ -144,18 +149,44 @@ function registerPayment() {
   const instId = document.getElementById('payInst').value;
   const amt    = parseFloat(document.getElementById('payAmt').value);
   const date   = document.getElementById('payDate').value;
-  const method = document.querySelector('#fees-pay .pay-chip.selected')?.textContent.trim() || 'نقدي';
+  const method = document.querySelector('#payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
 
   if (!sid || !instId || !amt) { showToast('⚠️ أكمل جميع الحقول'); return; }
 
-  const inst = DB.all('installments').find(i => i.id === instId);
-  DB.update('installments', instId, { status:'paid', paidDate:date, method });
-  const s = DB.all('students').find(x => x.id === sid);
-  if (s) DB.update('students', sid, { paid: (s.paid||0) + inst.amount });
+  const fileInput = document.getElementById('payReceiptFees');
+  const file = fileInput?.files?.[0];
 
-  showToast('✅ تم تسجيل الدفعة بنجاح');
-  loadStudentInstalls();
-  renderFeesTable('all');
+  function applyFeePayment(receiptData) {
+    const inst = DB.all('installments').find(i => i.id === instId);
+    const updates = { status:'paid', paidDate:date, method };
+    if (receiptData) updates.receipt = receiptData;
+    DB.update('installments', instId, updates);
+    const s = DB.all('students').find(x => x.id === sid);
+    if (s) DB.update('students', sid, { paid: (s.paid||0) + inst.amount });
+    showToast('✅ تم تسجيل الدفعة بنجاح');
+    if (fileInput) fileInput.value = '';
+    document.getElementById('payReceiptFeesPreview').innerHTML = '';
+    loadStudentInstalls();
+    renderFeesTable('all');
+  }
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = e => applyFeePayment(e.target.result);
+    reader.readAsDataURL(file);
+  } else {
+    applyFeePayment(null);
+  }
+}
+
+function previewFeeReceipt(input) {
+  const prev = document.getElementById('payReceiptFeesPreview');
+  if (!input.files || !input.files[0]) { prev.innerHTML = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">`;
+  };
+  reader.readAsDataURL(input.files[0]);
 }
 
 // ===== REPORTS PAGE =====
