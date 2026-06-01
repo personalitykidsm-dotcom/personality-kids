@@ -37,6 +37,9 @@ function openAddStudent() {
               <option value="esh">اشبيلية</option>
               <option value="sol">الصليبخات</option>
               <option value="mat">المطلاع</option>
+              <option value="esh_e">اشبيلية مسائي</option>
+              <option value="sol_e">الصليبخات مسائي</option>
+              <option value="mat_e">المطلاع مسائي</option>
             </select>
           </div>
         </div>
