@@ -86,7 +86,7 @@ function doLogin() {
 
   // restrict branch selector for supervisors
   const branchSel = document.getElementById('branchSelect');
-  if (user.role !== 'admin') {
+  if (!isAdmin(user)) {
     branchSel.style.display = 'none';
     branchSel.value = user.branch;
     currentBranch = user.branch;
@@ -147,25 +147,27 @@ function doLogout() {
 // ============================================================
 
 // Pages restricted to admin only (always)
-const ADMIN_ONLY_PAGES = ['licenses'];
-
-// Default page permissions per role (supervisor can't access these unless granted)
+// Pages blocked per role by default
 const SUPERVISOR_BLOCKED_DEFAULT = ['licenses'];
+const ADMIN_BLOCKED_DEFAULT      = ['settings']; // admin can see all but not settings
+
+function isSuperAdmin(user) { return user?.role === 'super_admin'; }
+function isAdmin(user)      { return user?.role === 'admin' || isSuperAdmin(user); }
 
 function getUserPermissions(user) {
-  // admin has all permissions
-  if (user.role === 'admin') return null; // null = unrestricted
-  // load per-user custom permissions (set via settings)
+  if (isSuperAdmin(user)) return null; // unrestricted
+  if (isAdmin(user)) {
+    // admin: all pages except settings
+    return Object.keys(PAGE_TITLES).filter(p => !ADMIN_BLOCKED_DEFAULT.includes(p));
+  }
   const custom = DB.get('userPerms_' + user.id);
-  if (custom) return custom; // array of allowed page IDs
-  // default: supervisors blocked from licenses
-  const allPages = Object.keys(PAGE_TITLES);
-  return allPages.filter(p => !SUPERVISOR_BLOCKED_DEFAULT.includes(p));
+  if (custom) return custom;
+  return Object.keys(PAGE_TITLES).filter(p => !SUPERVISOR_BLOCKED_DEFAULT.includes(p));
 }
 
 function canAccessPage(pageId) {
   if (!currentUser) return false;
-  if (currentUser.role === 'admin') return true;
+  if (isSuperAdmin(currentUser)) return true;
   const perms = getUserPermissions(currentUser);
   if (!perms) return true;
   return perms.includes(pageId);
@@ -174,15 +176,8 @@ function canAccessPage(pageId) {
 function applyNavPermissions(user) {
   document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     const pageId = item.dataset.page;
-    const allowed = user.role === 'admin' || !SUPERVISOR_BLOCKED_DEFAULT.includes(pageId);
-    item.style.display = allowed ? '' : 'none';
-    // also check custom perms
-    if (allowed && user.role !== 'admin') {
-      const perms = getUserPermissions(user);
-      if (perms && !perms.includes(pageId)) {
-        item.style.display = 'none';
-      }
-    }
+    const perms  = getUserPermissions(user);
+    item.style.display = (!perms || perms.includes(pageId)) ? '' : 'none';
   });
 }
 
@@ -279,7 +274,7 @@ function renderDashboard() {
   `;
 
   // Branch summary table
-  const isAdmin = currentUser && currentUser.role === 'admin';
+  const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
   const branches = isAdmin
     ? (currentBranch === 'all' ? ['esh','sol','mat','esh_e','sol_e','mat_e'] : [currentBranch])
     : [currentUser.branch];
@@ -365,7 +360,7 @@ function gradeFilter(grade, el) {
 }
 
 function setBranchFilter(branch, el) {
-  if (currentUser && currentUser.role !== 'admin') return;
+  if (currentUser && !isAdmin(currentUser)) return;
   currentBranch = branch;
   document.getElementById('branchSelect').value = branch;
   renderStudentsTable(activeGrade);
@@ -422,7 +417,7 @@ function renderStudentsTable(grade) {
 // UTIL — filter by current branch
 // ============================================================
 function filterByBranch(arr) {
-  if (currentUser && currentUser.role !== 'admin') {
+  if (currentUser && !isAdmin(currentUser)) {
     return arr.filter(i => i.branch === currentUser.branch);
   }
   if (!currentBranch || currentBranch === 'all') return arr;

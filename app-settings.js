@@ -16,11 +16,11 @@ function renderSettings() {
   const users    = DB.all('users');
 
   // only admin can access settings
-  if (currentUser?.role !== 'admin') {
+  if (currentUser?.role !== 'super_admin') {
     cont.innerHTML = `<div class="card" style="text-align:center;padding:40px">
       <div style="font-size:48px;margin-bottom:16px">🔒</div>
       <h3 style="color:var(--danger)">صلاحية مقيدة</h3>
-      <p style="color:var(--text-muted)">الإعدادات متاحة للمدير العام فقط</p>
+      <p style="color:var(--text-muted)">الإعدادات متاحة للمدير الرئيسي فقط</p>
     </div>`;
     return;
   }
@@ -81,6 +81,7 @@ function renderSettings() {
           <div class="form-group">
             <label>الدور *</label>
             <select id="userRole" class="form-control" onchange="toggleUserBranch()">
+              <option value="super_admin">مدير رئيسي</option>
               <option value="admin">مدير عام</option>
               <option value="supervisor">مشرف فرع</option>
             </select>
@@ -135,7 +136,7 @@ function renderUsersTab(cont) {
     <tr>
       <td><span class="avatar-circle" style="width:32px;height:32px;font-size:14px">${u.avatar||u.name[0]}</span></td>
       <td><b>${u.name}</b></td>
-      <td><span class="badge ${u.role==='admin'?'badge-purple':'badge-blue'}">${u.role==='admin'?'مدير عام':'مشرف'}</span></td>
+      <td><span class="badge ${u.role==='super_admin'?'badge-red':u.role==='admin'?'badge-purple':'badge-blue'}">${u.role==='super_admin'?'مدير رئيسي':u.role==='admin'?'مدير عام':'مشرف'}</span></td>
       <td><span class="badge ${BRANCHES[u.branch]?.badge||'badge-gray'}">${BRANCHES[u.branch]?.name||u.branch}</span></td>
       <td style="color:var(--text-muted);font-size:12px">${u.lastLogin||'—'}</td>
       <td>
@@ -208,13 +209,13 @@ function openEditUser(id) {
 
 function toggleUserBranch() {
   const role = document.getElementById('userRole').value;
-  document.getElementById('userBranchGroup').style.display = role === 'admin' ? 'none' : '';
+  document.getElementById('userBranchGroup').style.display = (role === 'admin' || role === 'super_admin') ? 'none' : '';
 }
 
 function saveUser() {
   const name   = document.getElementById('userName').value.trim();
   const role   = document.getElementById('userRole').value;
-  const branch = role === 'admin' ? 'all' : document.getElementById('userBranch').value;
+  const branch = (role === 'admin' || role === 'super_admin') ? 'all' : document.getElementById('userBranch').value;
   const avatar = document.getElementById('userAvatar').value.trim() || name[0];
   const pin    = document.getElementById('userPin').value;
   const editId = document.getElementById('editUserId').value;
@@ -507,7 +508,7 @@ const ALL_PAGES_LABELS = {
 const ALWAYS_ADMIN = ['licenses', 'settings'];
 
 function renderPermsTab(cont) {
-  const supervisors = DB.all('users').filter(u => u.role !== 'admin');
+  const supervisors = DB.all('users').filter(u => u.role !== 'admin' && u.role !== 'super_admin');
   if (!supervisors.length) {
     cont.innerHTML = `<div class="card" style="padding:30px;text-align:center;color:var(--text-muted)">لا يوجد مشرفون لضبط صلاحياتهم</div>`;
     return;
