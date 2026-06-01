@@ -167,21 +167,45 @@ function registerPayment() {
   const date   = document.getElementById('payDate').value;
   const method = document.querySelector('#payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
 
-  if (!sid || !instId || !amt) { showToast('⚠️ أكمل جميع الحقول'); return; }
+  if (!sid || !amt) { showToast('⚠️ أدخل الطالب والمبلغ'); return; }
 
   const fileInput = document.getElementById('payReceiptFees');
   const file = fileInput?.files?.[0];
 
   function applyFeePayment(receiptData) {
-    const inst = DB.all('installments').find(i => i.id === instId);
-    const updates = { status:'paid', paidDate:date, method };
-    if (receiptData) updates.receipt = receiptData;
-    DB.update('installments', instId, updates);
     const s = DB.all('students').find(x => x.id === sid);
-    if (s) DB.update('students', sid, { paid: (s.paid||0) + inst.amount });
+    if (!s) return;
+
+    if (instId) {
+      // update existing installment
+      const inst = DB.all('installments').find(i => i.id === instId);
+      if (inst) {
+        const newPartial = (inst.partialPaid || 0) + amt;
+        const newStatus = newPartial >= inst.amount ? 'paid' : 'partial';
+        const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial };
+        if (receiptData) updates.receipt = receiptData;
+        DB.update('installments', instId, updates);
+      }
+    } else {
+      // no installment selected — create a new payment record
+      const newInstId = DB.nextId('installments','I');
+      const rec = {
+        id: newInstId, studentId: sid,
+        num: DB.all('installments').filter(i=>i.studentId===sid).length + 1,
+        amount: amt, partialPaid: amt,
+        dueDate: date, paidDate: date,
+        status: 'paid', method
+      };
+      if (receiptData) rec.receipt = receiptData;
+      DB.add('installments', rec);
+    }
+
+    DB.update('students', sid, { paid: (s.paid || 0) + amt });
     showToast('✅ تم تسجيل الدفعة بنجاح');
     if (fileInput) fileInput.value = '';
-    document.getElementById('payReceiptFeesPreview').innerHTML = '';
+    const prev = document.getElementById('payReceiptFeesPreview');
+    if (prev) prev.innerHTML = '';
+    document.getElementById('payAmt').value = '';
     loadStudentInstalls();
     renderFeesTable('all');
   }
