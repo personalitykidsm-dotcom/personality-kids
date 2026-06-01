@@ -139,6 +139,9 @@ function loadStudentInstalls() {
       return `<option value="${i.id}">${label}</option>`;
     }).join('');
 
+  // clear amount when switching student
+  document.getElementById('payAmt').value = '';
+
   // auto-select if only one installment
   if (insts.length === 1) {
     sel.value = insts[0].id;
@@ -167,7 +170,19 @@ function registerPayment() {
   const date   = document.getElementById('payDate').value;
   const method = document.querySelector('#payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
 
-  if (!sid || !amt) { showToast('⚠️ أدخل الطالب والمبلغ'); return; }
+  if (!sid) { showToast('⚠️ اختر الطالب'); return; }
+  if (!amt || amt <= 0) { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
+
+  const _s = DB.all('students').find(x => x.id === sid);
+  const _remaining = _s ? (_s.net - _s.paid) : 0;
+  if (_s && _remaining <= 0 && !instId) {
+    showToast('⚠️ هذا الطالب مكتمل السداد');
+    return;
+  }
+  if (_remaining > 0 && amt > _remaining) {
+    showToast(`⚠️ المبلغ أكبر من المتبقي (${fmtKD(_remaining)})`);
+    return;
+  }
 
   const fileInput = document.getElementById('payReceiptFees');
   const file = fileInput?.files?.[0];
@@ -200,7 +215,8 @@ function registerPayment() {
       DB.add('installments', rec);
     }
 
-    DB.update('students', sid, { paid: (s.paid || 0) + amt });
+    const newTotalPaid = Math.min((s.paid || 0) + amt, s.net || 999999);
+    DB.update('students', sid, { paid: newTotalPaid });
     showToast('✅ تم تسجيل الدفعة بنجاح');
     if (fileInput) fileInput.value = '';
     const prev = document.getElementById('payReceiptFeesPreview');
