@@ -33,13 +33,10 @@ function openAddStudent() {
           </div>
           <div class="form-group">
             <label>الفرع *</label>
-            <select id="sBranch">
-              <option value="esh">اشبيلية</option>
-              <option value="sol">الصليبخات</option>
-              <option value="mat">المطلاع</option>
-              <option value="esh_e">اشبيلية مسائي</option>
-              <option value="sol_e">الصليبخات مسائي</option>
-              <option value="mat_e">المطلاع مسائي</option>
+            <select id="sBranch" ${currentUser?.role !== 'admin' ? 'disabled' : ''}>
+              ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>
+                `<option value="${k}">${v.name}</option>`
+              ).join('')}
             </select>
           </div>
         </div>
@@ -170,9 +167,13 @@ function openAddStudent() {
   document.getElementById('instStart').value = new Date().toISOString().split('T')[0];
   document.getElementById('sStart').value    = new Date().toISOString().split('T')[0];
 
-  // set branch from current filter
-  if (currentBranch !== 'all') {
-    document.getElementById('sBranch').value = currentBranch;
+  // set branch based on user role
+  const branchSel = document.getElementById('sBranch');
+  if (currentUser?.role !== 'admin') {
+    branchSel.value    = currentUser.branch;
+    branchSel.disabled = true;
+  } else if (currentBranch !== 'all') {
+    branchSel.value = currentBranch;
   }
 }
 
