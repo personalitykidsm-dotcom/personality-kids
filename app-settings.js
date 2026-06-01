@@ -601,7 +601,7 @@ function readExcelFile(file, callback) {
 function downloadStudentsTemplate() {
   xlsxExport([{
     'الكود':'S001','الاسم':'أحمد محمد الرشيد',
-    'الفرع (esh/sol/mat)':'esh','المرحلة (nursery/KG1/KG2)':'KG1',
+    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','المرحلة (nursery/KG1/KG2)':'KG1',
     'هاتف 1':'96550001','هاتف 2':'',
     'تاريخ الميلاد (YYYY-MM-DD)':'2020-03-15',
     'تاريخ المباشرة (YYYY-MM-DD)':'2023-09-01',
@@ -612,14 +612,14 @@ function downloadStudentsTemplate() {
 function downloadClothesTemplate() {
   xlsxExport([{
     'الكود':'C001','الصنف':'قميص','المقاس':'4 سنوات',
-    'الفرع (esh/sol/mat)':'esh','الكمية':'10','الحد الأدنى':'5'
+    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الكمية':'10','الحد الأدنى':'5'
   }], 'نموذج_الملابس');
 }
 
 function downloadSuppliesTemplate() {
   xlsxExport([{
     'الكود':'P001','الصنف':'صابون يدين','الوحدة':'علبة',
-    'الفرع (esh/sol/mat)':'esh','الكمية':'10',
+    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الكمية':'10',
     'تاريخ الاستلام (YYYY-MM-DD)':'2025-01-01',
     'تاريخ الانتهاء (YYYY-MM-DD)':'2026-01-01'
   }], 'نموذج_المستهلكات');
@@ -628,7 +628,7 @@ function downloadSuppliesTemplate() {
 function downloadEmployeesTemplate() {
   xlsxExport([{
     'الكود':'E001','الاسم':'سلمى أحمد','الوظيفة':'معلمة KG1',
-    'الفرع (esh/sol/mat)':'esh','الجنسية':'كويتية',
+    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الجنسية':'كويتية',
     'الهاتف':'96560001','رقم الهوية':'',
     'الراتب':'450','البدل':'50',
     'بداية العقد (YYYY-MM-DD)':'2023-09-01',
@@ -650,7 +650,7 @@ function importStudentsFromExcel(e) {
       const fees=parseFloat(r['الرسوم'])||0, disc=parseFloat(r['الخصم'])||0;
       DB.add('students',{
         id, name,
-        branch:    r['الفرع (esh/sol/mat)']||'esh',
+        branch:    r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
         grade:     r['المرحلة (nursery/KG1/KG2)']||'KG1',
         phone1:    String(r['هاتف 1']||''),
         phone2:    String(r['هاتف 2']||''),
@@ -678,7 +678,7 @@ function importClothesFromExcel(e) {
       DB.add('clothes',{
         id, name,
         size:   r['المقاس']||'',
-        branch: r['الفرع (esh/sol/mat)']||'esh',
+        branch: r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
         qty:    parseInt(r['الكمية'])||0,
         minQty: parseInt(r['الحد الأدنى'])||5
       });
@@ -701,7 +701,7 @@ function importSuppliesFromExcel(e) {
       DB.add('supplies',{
         id, name,
         unit:        r['الوحدة']||'',
-        branch:      r['الفرع (esh/sol/mat)']||'esh',
+        branch:      r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
         qty:         parseFloat(r['الكمية'])||0,
         receiveDate: r['تاريخ الاستلام (YYYY-MM-DD)']||'',
         expiryDate:  r['تاريخ الانتهاء (YYYY-MM-DD)']||''
@@ -725,7 +725,7 @@ function importEmployeesFromExcel(e) {
       DB.add('employees',{
         id, name,
         role:          r['الوظيفة']||'',
-        branch:        r['الفرع (esh/sol/mat)']||'esh',
+        branch:        r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
         nationality:   r['الجنسية']||'',
         phone:         String(r['الهاتف']||''),
         idNo:          String(r['رقم الهوية']||''),
@@ -737,9 +737,4 @@ function importEmployeesFromExcel(e) {
         annualLeave:   parseInt(r['الإجازة السنوية'])||21,
         status:        r['الحالة (active/leave/inactive)']||'active'
       });
-      added++;
-    });
-    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
-    e.target.value='';
-  });
-}
+      ad
