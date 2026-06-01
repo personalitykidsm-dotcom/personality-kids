@@ -57,6 +57,9 @@ function renderFees() {
               style="font-size:13px">
             <div id="payReceiptFeesPreview" style="margin-top:8px"></div>
           </div>
+          <div class="form-group"><label>بيان / ملاحظات</label>
+            <textarea id="payNote" class="form-control" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;font-family:inherit;font-size:13px"></textarea>
+          </div>
           <button class="btn btn-primary" style="width:100%" onclick="registerPayment()">💾 تسجيل الدفعة</button>
         </div>
         <div class="card">
@@ -197,19 +200,21 @@ function registerPayment() {
       if (inst) {
         const newPartial = (inst.partialPaid || 0) + amt;
         const newStatus = newPartial >= inst.amount ? 'paid' : 'partial';
-        const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial };
+        const note = document.getElementById('payNote')?.value?.trim() || '';
+        const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial, note };
         if (receiptData) updates.receipt = receiptData;
         DB.update('installments', instId, updates);
       }
     } else {
       // no installment selected — create a new payment record
       const newInstId = DB.nextId('installments','I');
+      const note = document.getElementById('payNote')?.value?.trim() || '';
       const rec = {
         id: newInstId, studentId: sid,
         num: DB.all('installments').filter(i=>i.studentId===sid).length + 1,
         amount: amt, partialPaid: amt,
         dueDate: date, paidDate: date,
-        status: 'paid', method
+        status: 'paid', method, note
       };
       if (receiptData) rec.receipt = receiptData;
       DB.add('installments', rec);
@@ -222,6 +227,8 @@ function registerPayment() {
     const prev = document.getElementById('payReceiptFeesPreview');
     if (prev) prev.innerHTML = '';
     document.getElementById('payAmt').value = '';
+    const noteEl = document.getElementById('payNote');
+    if (noteEl) noteEl.value = '';
     loadStudentInstalls();
     renderFeesTable('all');
   }
