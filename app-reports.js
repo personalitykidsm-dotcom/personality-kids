@@ -264,6 +264,7 @@ function renderReports() {
     <div id="rep-payments">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <div class="filter-bar" style="margin:0">
+          ${(currentUser?.role==='super_admin'||currentUser?.role==='admin') ? `
           <span class="filter-chip active" onclick="repBranch(this,'all')">كل الفروع</span>
           <span class="filter-chip" onclick="repBranch(this,'esh')">اشبيلية</span>
           <span class="filter-chip" onclick="repBranch(this,'sol')">الصليبخات</span>
@@ -271,6 +272,7 @@ function renderReports() {
           <span class="filter-chip" onclick="repBranch(this,'esh_e')">اشبيلية مسائي</span>
           <span class="filter-chip" onclick="repBranch(this,'sol_e')">الصليبخات مسائي</span>
           <span class="filter-chip" onclick="repBranch(this,'mat_e')">المطلاع مسائي</span>
+          ` : `<span class="badge badge-green" style="padding:6px 12px">${BRANCHES[currentUser?.branch]?.name||''}</span>`}
           <input type="date" id="repFrom" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
           <input type="date" id="repTo"   style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
         </div>
@@ -291,6 +293,11 @@ function renderReports() {
     <div id="rep-daily" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         <input type="date" id="dailyDate" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        ${(currentUser?.role==='super_admin'||currentUser?.role==='admin') ? `
+        <select id="dailyBranchSel" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <option value="all">كل الفروع</option>
+          ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>'<option value="'+k+'">'+v.name+'</option>').join('')}
+        </select>` : ''}
         <button class="btn btn-primary" onclick="renderDailyReport()">🔍 عرض</button>
         <button class="btn btn-outline" onclick="printDailyReport()">🖨️ طباعة</button>
       </div>
@@ -348,14 +355,14 @@ function renderPaymentsReport(branchF) {
   const students = DB.all('students');
   const allInsts = DB.all('installments').filter(i => i.status === 'paid' || i.status === 'partial');
 
-  // for supervisor: restrict to own branch
-  const userBranch = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' ? null : currentUser?.branch;
+  const isAdminUser = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const userBranch  = isAdminUser ? null : currentUser?.branch;
 
   const rows = allInsts.map(i => {
     const s = students.find(x => x.id === i.studentId);
     if (!s) return '';
-    if (userBranch && s.branch !== userBranch) return '';
-    if (branchF !== 'all' && s.branch !== branchF) return '';
+    if (userBranch) { if (s.branch !== userBranch) return ''; }
+    else if (branchF !== 'all' && s.branch !== branchF) return '';
     if (fromDate && (i.paidDate||'') < fromDate) return '';
     if (toDate   && (i.paidDate||'') > toDate)   return '';
     const amt = i.partialPaid || i.amount;
@@ -376,7 +383,8 @@ function renderPaymentsReport(branchF) {
 }
 
 function renderPlanReport() {
-  const userBranch = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' ? null : currentUser?.branch;
+  const isAdminUser2 = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const userBranch   = isAdminUser2 ? null : currentUser?.branch;
   const installs = DB.all('installments');
   const students = DB.all('students');
   const rows = installs.map(i => {
@@ -1682,92 +1690,96 @@ function supPrintLogReport(branch) {
 // DAILY REPORT — التقرير اليومي التحصيلي
 // ============================================================
 function renderDailyReport() {
-  const date     = document.getElementById('dailyDate').value;
+  const dateEl = document.getElementById('dailyDate');
+  if (!dateEl) return;
+  const date = dateEl.value;
   if (!date) return;
-  const branch   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
-                   ? (currentBranch === 'all' ? null : currentBranch)
-                   : currentUser?.branch;
-  const branchName = branch ? (BRANCHES[branch]?.name || branch) : 'كل الفروع';
+
+  const isAdminUser = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const branch      = isAdminUser ? (document.getElementById('dailyBranchSel')?.value || 'all') : currentUser?.branch;
+  const branchName  = branch && branch !== 'all' ? (BRANCHES[branch]?.name || branch) : 'كل الفروع';
+
   const students = DB.all('students');
-  const installs = DB.all('installments').filter(i => {
+  const installs = DB.all('installments').filter(function(i) {
     if (i.status !== 'paid' && i.status !== 'partial') return false;
-    if ((i.paidDate || '').slice(0,10) !== date) return false;
-    if (branch) {
-      const s = students.find(x => x.id === i.studentId);
+    const pd = (i.paidDate || '').toString().slice(0,10);
+    if (pd !== date) return false;
+    if (branch && branch !== 'all') {
+      const s = students.find(function(x){ return x.id === i.studentId; });
       if (!s || s.branch !== branch) return false;
     }
     return true;
   });
 
-  // totals by method
   const totals = { 'نقدي':0, 'برنامج':0, 'كي نت':0, 'رابط':0 };
-  installs.forEach(i => {
-    const amt = i.partialPaid || i.amount || 0;
-    const m = (i.method||'').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','');
-    const key = m.includes('برنامج')||m.includes('📱') ? 'برنامج'
-              : m.includes('كي نت')||m.includes('💳') ? 'كي نت'
-              : m.includes('رابط')||m.includes('🔗') ? 'رابط' : 'نقدي';
-    totals[key] = (totals[key]||0) + parseFloat(amt);
-  });
-  const total = Object.values(totals).reduce((a,b)=>a+b,0);
-
-  const rows = installs.map((i, idx) => {
-    const s   = students.find(x => x.id === i.studentId);
+  installs.forEach(function(i) {
     const amt = parseFloat(i.partialPaid || i.amount || 0);
-    const m   = (i.method||'نقدي').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','');
-    return `<tr>
-      <td style="text-align:center">${idx+1}</td>
-      <td>${s?.name||'—'}</td>
-      <td>${i.note||'—'}</td>
-      <td style="text-align:center">${fmtKD(amt)}</td>
-      <td style="text-align:center">${m}</td>
-      <td style="text-align:center">${i.id||'—'}</td>
-      <td style="text-align:center">${fmtDate(s?.startDate||'')}</td>
-      <td></td>
-    </tr>`;
-  }).join('');
+    const m = (i.method || '').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim();
+    let key = 'نقدي';
+    if (m.includes('برنامج')) key = 'برنامج';
+    else if (m.includes('كي نت') || m.includes('knet') || m.includes('KNET')) key = 'كي نت';
+    else if (m.includes('رابط')) key = 'رابط';
+    totals[key] += amt;
+  });
+  const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'];
+
+  let rowsHtml = '';
+  installs.forEach(function(i, idx) {
+    const s   = students.find(function(x){ return x.id === i.studentId; });
+    const amt = parseFloat(i.partialPaid || i.amount || 0);
+    const m   = (i.method || 'نقدي').replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim();
+    rowsHtml += '<tr>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (idx+1) + '</td>' +
+      '<td style="border:1px solid #ccc;padding:5px">' + (s ? s.name : '—') + '</td>' +
+      '<td style="border:1px solid #ccc;padding:5px">' + (i.note || '—') + '</td>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + fmtKD(amt) + '</td>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + m + '</td>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (i.id || '—') + '</td>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + fmtDate(s ? s.startDate : '') + '</td>' +
+      '<td style="border:1px solid #ccc;padding:5px"></td>' +
+      '</tr>';
+  });
 
   const dateAr = new Date(date).toLocaleDateString('ar-KW',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
-  document.getElementById('dailyReportContent').innerHTML = `
-    <div id="dailyPrintArea" style="font-family:inherit;direction:rtl">
-      <div style="text-align:center;margin-bottom:8px">
-        <h3 style="margin:0">التقرير التحصيلي اليومي — فرع ${branchName}</h3>
-        <p style="margin:4px 0;font-size:13px">اليوم: ${dateAr}</p>
-      </div>
-      ${installs.length === 0
-        ? '<p style="text-align:center;color:var(--text-muted);padding:30px">لا توجد مدفوعات في هذا اليوم</p>'
-        : `<table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="background:var(--primary);color:#fff">
-            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">م</th>
-            <th style="border:1px solid #ccc;padding:6px 8px">الاسم</th>
-            <th style="border:1px solid #ccc;padding:6px 8px">البيانات</th>
-            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">المبلغ</th>
-            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">طريقة الدفع</th>
-            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">رقم السند</th>
-            <th style="border:1px solid #ccc;padding:6px 4px;text-align:center">المباشرة</th>
-            <th style="border:1px solid #ccc;padding:6px 8px">الملاحظات</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div style="display:flex;justify-content:space-between;margin-top:20px;gap:16px;flex-wrap:wrap">
-        <table style="border-collapse:collapse;font-size:13px;min-width:220px">
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد نقداً</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">${fmtKD(totals['نقدي'])}</td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['رابط'])}</td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['كي نت'])}</td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(totals['برنامج'])}</td></tr>
-          <tr style="font-weight:bold;background:#f0f0f0"><td style="border:1px solid #ccc;padding:6px 12px">الإجمالي</td><td style="border:1px solid #ccc;padding:6px 12px">${fmtKD(total)}</td></tr>
-        </table>
-        <table style="border-collapse:collapse;font-size:13px;min-width:240px">
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">اسم الموظفة</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">اسم مستلم الكاش</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
-          <tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>
-        </table>
-      </div>`}
-    </div>`;
+  let html = '<div id="dailyPrintArea" style="font-family:inherit;direction:rtl">';
+  html += '<div style="text-align:center;margin-bottom:12px">';
+  html += '<h3 style="margin:0">التقرير التحصيلي اليومي — فرع ' + branchName + '</h3>';
+  html += '<p style="margin:4px 0;font-size:13px">اليوم: ' + dateAr + '</p>';
+  html += '</div>';
+
+  if (installs.length === 0) {
+    html += '<p style="text-align:center;color:#999;padding:30px">لا توجد مدفوعات في هذا اليوم</p>';
+  } else {
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<thead><tr style="background:#1a5c42;color:#fff">';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">م</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">الاسم</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">البيانات</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المبلغ</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">طريقة الدفع</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">رقم السند</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المباشرة</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">الملاحظات</th>';
+    html += '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+
+    html += '<div style="display:flex;justify-content:space-between;margin-top:20px;gap:16px;flex-wrap:wrap">';
+    html += '<table style="border-collapse:collapse;font-size:13px;min-width:200px">';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد نقداً</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">' + fmtKD(totals['نقدي']) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['رابط']) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['كي نت']) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['برنامج']) + '</td></tr>';
+    html += '<tr style="font-weight:bold;background:#f0f0f0"><td style="border:1px solid #ccc;padding:6px 12px">الإجمالي</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(total) + '</td></tr>';
+    html += '</table>';
+    html += '<table style="border-collapse:collapse;font-size:13px;min-width:240px">';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">اسم الموظفة</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">اسم مستلم الكاش</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
+    html += '</table></div>';
+  }
+  html += '</div>';
+  document.getElementById('dailyReportContent').innerHTML = html;
 }
 
 function printDailyReport() {
