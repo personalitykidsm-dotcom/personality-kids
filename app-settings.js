@@ -606,7 +606,7 @@ function downloadStudentsTemplate() {
     'هاتف 1':'96550001','هاتف 2':'',
     'تاريخ الميلاد (YYYY-MM-DD)':'2020-03-15',
     'تاريخ المباشرة (YYYY-MM-DD)':'2023-09-01',
-    'الرسوم':'1200','الخصم':'0','المسدد':'0','ملاحظات':''
+    'الرسوم':'1200','الخصم':'0','المسدد':'0','تاريخ الدفع (YYYY-MM-DD)':'','طريقة الدفع (نقدي/برنامج/كي نت/رابط)':'نقدي','ملاحظات':''
   }], 'نموذج_الطلاب');
 }
 
@@ -639,6 +639,17 @@ function downloadEmployeesTemplate() {
   }], 'نموذج_الموظفين');
 }
 
+function excelDateToStr(val) {
+  if (!val) return '';
+  if (typeof val === 'number') {
+    // Excel serial date to YYYY-MM-DD
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    return date.toISOString().split('T')[0];
+  }
+  // already a string — normalize separators
+  return String(val).replace(/\//g, '-').slice(0, 10);
+}
+
 function importStudentsFromExcel(e) {
   const file = e.target.files[0]; if (!file) return;
   readExcelFile(file, rows => {
@@ -657,8 +668,8 @@ function importStudentsFromExcel(e) {
         grade:     r['المرحلة (nursery/KG1/KG2)']||'KG1',
         phone1:    String(r['هاتف 1']||''),
         phone2:    String(r['هاتف 2']||''),
-        dob:       r['تاريخ الميلاد (YYYY-MM-DD)']||'',
-        startDate: r['تاريخ المباشرة (YYYY-MM-DD)']||'',
+        dob:       excelDateToStr(r['تاريخ الميلاد (YYYY-MM-DD)']||''),
+        startDate: excelDateToStr(r['تاريخ المباشرة (YYYY-MM-DD)']||''),
         fees, discount:disc, net, paid,
         notes: r['ملاحظات']||''
       });
@@ -668,7 +679,7 @@ function importStudentsFromExcel(e) {
       DB.add('installments',{
         id: instId2, studentId: id, num:1,
         amount: net, partialPaid: paid,
-        dueDate: r['تاريخ المباشرة (YYYY-MM-DD)']||'',
+        dueDate: excelDateToStr(r['تاريخ المباشرة (YYYY-MM-DD)']||''),
         paidDate: paid > 0 ? new Date().toISOString().split('T')[0] : '',
         status: instStatus, method: paid > 0 ? 'نقدي' : ''
       });
@@ -716,8 +727,8 @@ function importSuppliesFromExcel(e) {
         unit:        r['الوحدة']||'',
         branch:      r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
         qty:         parseFloat(r['الكمية'])||0,
-        receiveDate: r['تاريخ الاستلام (YYYY-MM-DD)']||'',
-        expiryDate:  r['تاريخ الانتهاء (YYYY-MM-DD)']||''
+        receiveDate: excelDateToStr(r['تاريخ الاستلام (YYYY-MM-DD)']||''),
+        expiryDate:  excelDateToStr(r['تاريخ الانتهاء (YYYY-MM-DD)']||'')
       });
       added++;
     });
@@ -744,8 +755,8 @@ function importEmployeesFromExcel(e) {
         idNo:          String(r['رقم الهوية']||''),
         salary:        parseFloat(r['الراتب'])||0,
         allowance:     parseFloat(r['البدل'])||0,
-        contractStart: r['بداية العقد (YYYY-MM-DD)']||'',
-        contractEnd:   r['نهاية العقد (YYYY-MM-DD)']||'',
+        contractStart: excelDateToStr(r['بداية العقد (YYYY-MM-DD)']||''),
+        contractEnd:   excelDateToStr(r['نهاية العقد (YYYY-MM-DD)']||''),
         contractType:  r['نوع العقد']||'دوام كامل',
         annualLeave:   parseInt(r['الإجازة السنوية'])||21,
         status:        r['الحالة (active/leave/inactive)']||'active'
