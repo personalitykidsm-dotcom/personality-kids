@@ -81,7 +81,9 @@ const TO_SNAKE = {
   contractEnd:'contract_end', contractType:'contract_type',
   annualLeave:'annual_leave', receiveDate:'receive_date',
   expiryDate:'expiry_date', issueDate:'issue_date',
-  minQty:'min_qty', idNo:'id_no', lastLogin:'last_login'
+  minQty:'min_qty', idNo:'id_no', lastLogin:'last_login',
+  partialPaid:'partial_paid', payLink:'pay_link',
+  receiptImg:'receipt_img', receiptName:'receipt_name'
 };
 const TO_CAMEL = Object.fromEntries(Object.entries(TO_SNAKE).map(([k,v])=>[v,k]));
 
@@ -281,6 +283,4 @@ function empStatus(e){
 function licenseStatus(l){
   const d=daysUntil(l.expiryDate||l.expiry_date);
   if(d<0)  return {label:'منتهي',       cls:'badge-red',   card:'lc-danger'};
-  if(d<60) return {label:'ينتهي قريباً',cls:'badge-orange',card:'lc-warning'};
-  return          {label:'ساري',        cls:'badge-green', card:'lc-good'};
-}
+  if(d<60) return {label:'ينتهي قريباً',cls:'badge-oran
