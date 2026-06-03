@@ -680,8 +680,8 @@ function importStudentsFromExcel(e) {
         id: instId2, studentId: id, num:1,
         amount: net, partialPaid: paid,
         dueDate: excelDateToStr(r['تاريخ المباشرة (YYYY-MM-DD)']||''),
-        paidDate: paid > 0 ? new Date().toISOString().split('T')[0] : '',
-        status: instStatus, method: paid > 0 ? 'نقدي' : ''
+        paidDate: paid > 0 ? (excelDateToStr(r['تاريخ الدفع (YYYY-MM-DD)']||'') || new Date().toISOString().split('T')[0]) : '',
+        status: instStatus, method: paid > 0 ? (r['طريقة الدفع (نقدي/برنامج/كي نت/رابط)']||'نقدي') : ''
       });
       added++;
     });
