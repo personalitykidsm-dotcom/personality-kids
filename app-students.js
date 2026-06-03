@@ -453,6 +453,20 @@ function openStudentInstallments(studentId) {
         <button class="modal-close" onclick="closeModal('modal-installments')">✕</button>
       </div>
       <div class="modal-body">
+        ${(()=>{
+          const refList = DB.all('refunds').filter(r => r.studentId === studentId);
+          const totalRefunded = refList.reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
+          const netCollected  = s.paid - totalRefunded;
+          const refundBlock   = totalRefunded > 0 ? `
+          <div style="background:#f3f0ff;padding:10px 16px;border-radius:8px;flex:1;text-align:center">
+            <div style="font-size:11px;color:#8b5cf6">المرتجع</div>
+            <div style="font-weight:800;color:#8b5cf6">${fmtKD(totalRefunded)}</div>
+          </div>
+          <div style="background:#e8f8f0;padding:10px 16px;border-radius:8px;flex:1;text-align:center">
+            <div style="font-size:11px;color:var(--primary)">المحصّل الفعلي</div>
+            <div style="font-weight:800;color:var(--primary)">${fmtKD(netCollected)}</div>
+          </div>` : '';
+          return `
         <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
           <div style="background:var(--primary-light);padding:10px 16px;border-radius:8px;flex:1;text-align:center">
             <div style="font-size:11px;color:var(--text-muted)">الصافي</div>
@@ -466,7 +480,9 @@ function openStudentInstallments(studentId) {
             <div style="font-size:11px;color:var(--text-muted)">المتبقي</div>
             <div style="font-weight:800;color:var(--danger)">${fmtKD(s.net - s.paid)}</div>
           </div>
-        </div>
+          ${refundBlock}
+        </div>`;
+        })()}
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>المبلغ</th><th>الاستحقاق</th><th>تاريخ الدفع</th><th>طريقة الدفع</th><th>الحالة</th><th>إجراء</th></tr></thead>
