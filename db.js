@@ -101,7 +101,7 @@ function toCamel(obj) {
 const TABLES = {
   users:'users', students:'students', installments:'installments',
   employees:'employees', leaves:'leaves', supplies:'supplies',
-  clothes:'clothes', licenses:'licenses'
+  clothes:'clothes', licenses:'licenses', refunds:'refunds'
 };
 
 // ============================================================
@@ -270,6 +270,9 @@ function daysUntil(d){ if(!d) return 9999; return Math.round((new Date(d)-new Da
 function fmtDate(d){ if(!d) return '—'; return d.replace(/-/g,'/'); }
 function fmtKD(n){ return parseFloat(n||0).toFixed(3)+' د.ك'; }
 function studentStatus(s){
+  const refunds = (typeof DB !== 'undefined' ? DB.all('refunds') : []).filter(r => r.studentId === s.id);
+  const totalRefunded = refunds.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  if (totalRefunded > 0) return {label:'مرتجع', cls:'badge-purple', refunded: totalRefunded};
   const r=s.net-s.paid;
   if(r<=0)      return {label:'مكتمل',     cls:'badge-green'};
   if(s.paid===0) return {label:'لم يُسدَّد',cls:'badge-red'};
