@@ -18,7 +18,8 @@ function renderFees() {
         <input type="search" id="feesSearch" placeholder="🔍 بحث باسم أو كود الطالب"
           style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;min-width:220px"
           oninput="renderFeesTable(currentFeesStatus||'all')">
-        <button class="btn btn-outline" style="margin-right:auto" onclick="exportFeesExcel()">📥 Excel</button>
+        <button class="btn btn-outline" style="margin-right:auto" onclick="exportFeesExcel()">📥 Excel الرسوم</button>
+        <button class="btn btn-outline" style="color:#8b5cf6;border-color:#8b5cf6" onclick="exportRefundsExcel()">↩️ Excel المرتجعات</button>
         <button class="btn btn-outline" onclick="printFeesReport()">🖨️ PDF</button>
       </div>
       <div class="card">
@@ -1271,25 +1272,55 @@ function supExportExcel(branch) {
 
 // ===== EXCEL EXPORTS =====
 function exportStudentsExcel() {
-  const data = filterByBranch(DB.all('students')).map(s => ({
-    'الكود': s.id, 'الاسم': s.name,
-    'الفرع': BRANCHES[s.branch].name,
-    'المرحلة': s.grade === 'nursery' ? 'حضانة' : s.grade,
-    'هاتف 1': s.phone1, 'هاتف 2': s.phone2||'',
-    'الرسوم': s.fees, 'الخصم': s.discount,
-    'الصافي': s.net, 'المدفوع': s.paid, 'المتبقي': s.net - s.paid
-  }));
+  const allRefunds = DB.all('refunds');
+  const data = filterByBranch(DB.all('students')).map(s => {
+    const refunded = allRefunds.filter(r=>r.studentId===s.id).reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
+    return {
+      'الكود': s.id, 'الاسم': s.name,
+      'الفرع': BRANCHES[s.branch].name,
+      'المرحلة': s.grade === 'nursery' ? 'حضانة' : s.grade,
+      'هاتف 1': s.phone1, 'هاتف 2': s.phone2||'',
+      'الرسوم': s.fees, 'الخصم': s.discount,
+      'الصافي': s.net, 'المدفوع': s.paid,
+      'المرتجع': refunded,
+      'المحصّل الفعلي': parseFloat((s.paid - refunded).toFixed(3)),
+      'المتبقي': s.net - s.paid
+    };
+  });
   xlsxExport(data, 'تقرير_الطلاب');
 }
 
 function exportFeesExcel() {
-  const data = filterByBranch(DB.all('students')).map(s => ({
-    'الطالب': s.name, 'الفرع': BRANCHES[s.branch].name,
-    'الرسوم الإجمالية': s.fees, 'الخصم': s.discount,
-    'الصافي': s.net, 'المدفوع': s.paid, 'المتبقي': s.net - s.paid,
-    'نسبة السداد': s.net > 0 ? Math.round(s.paid/s.net*100)+'%' : '0%'
-  }));
+  const allRefunds = DB.all('refunds');
+  const data = filterByBranch(DB.all('students')).map(s => {
+    const refunded = allRefunds.filter(r=>r.studentId===s.id).reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
+    return {
+      'الطالب': s.name, 'الفرع': BRANCHES[s.branch].name,
+      'الرسوم الإجمالية': s.fees, 'الخصم': s.discount,
+      'الصافي': s.net, 'المدفوع': s.paid,
+      'المرتجع': refunded,
+      'المحصّل الفعلي': parseFloat((s.paid - refunded).toFixed(3)),
+      'المتبقي': s.net - s.paid,
+      'نسبة السداد': s.net > 0 ? Math.round(s.paid/s.net*100)+'%' : '0%'
+    };
+  });
   xlsxExport(data, 'تقرير_الرسوم');
+}
+
+function exportRefundsExcel() {
+  const students = DB.all('students');
+  const data = DB.all('refunds').map(r => {
+    const s = students.find(x => x.id === r.studentId) || {};
+    return {
+      'كود المرتجع': r.id,
+      'الطالب': s.name||'',
+      'الفرع': s.branch ? BRANCHES[s.branch].name : '',
+      'المبلغ المرتجع': r.amount,
+      'التاريخ': fmtDate(r.date),
+      'السبب': r.reason||''
+    };
+  });
+  xlsxExport(data, 'تقرير_المرتجعات');
 }
 
 function exportPaymentsExcel() {
