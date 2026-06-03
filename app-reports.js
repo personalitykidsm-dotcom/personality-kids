@@ -58,6 +58,10 @@ function renderFees() {
               style="font-size:13px">
             <div id="payReceiptFeesPreview" style="margin-top:8px"></div>
           </div>
+          <div class="form-group"><label>رقم السند</label>
+            <input type="text" id="payVoucherNo" class="form-control" placeholder="اختياري"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
           <div class="form-group"><label>بيان / ملاحظات</label>
             <textarea id="payNote" class="form-control" rows="2" placeholder="أي ملاحظات إضافية..." style="resize:vertical;font-family:inherit;font-size:13px"></textarea>
           </div>
@@ -211,7 +215,8 @@ function registerPayment() {
         const newPartial = (inst.partialPaid || 0) + amt;
         const newStatus = newPartial >= inst.amount ? 'paid' : 'partial';
         const note = document.getElementById('payNote')?.value?.trim() || '';
-        const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial, note };
+        const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
+        const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial, note, voucherNo };
         if (receiptData) updates.receipt = receiptData;
         DB.update('installments', instId, updates);
       }
@@ -219,12 +224,13 @@ function registerPayment() {
       // no installment selected — create a new payment record
       const newInstId = DB.nextId('installments','I');
       const note = document.getElementById('payNote')?.value?.trim() || '';
+      const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
       const rec = {
         id: newInstId, studentId: sid,
         num: DB.all('installments').filter(i=>i.studentId===sid).length + 1,
         amount: amt, partialPaid: amt,
         dueDate: date, paidDate: date,
-        status: 'paid', method, note
+        status: 'paid', method, note, voucherNo
       };
       if (receiptData) rec.receipt = receiptData;
       DB.add('installments', rec);
@@ -1774,7 +1780,7 @@ function renderDailyReport() {
       '<td style="border:1px solid #ccc;padding:5px">' + (i.note || '—') + '</td>' +
       '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + fmtKD(amt) + '</td>' +
       '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + m + '</td>' +
-      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (i.id || '—') + '</td>' +
+      '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (i.voucherNo || '—') + '</td>' +
       '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + fmtDate(s ? s.startDate : '') + '</td>' +
       '<td style="border:1px solid #ccc;padding:5px"></td>' +
       '</tr>';

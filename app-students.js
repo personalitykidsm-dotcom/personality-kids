@@ -569,6 +569,12 @@ function payInstallment(instId, studentId) {
           </div>
 
           <div class="form-group">
+            <label>رقم السند</label>
+            <input type="text" id="payVoucherNo" placeholder="اختياري"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+
+          <div class="form-group">
             <label>إيصال / صورة الدفع</label>
             <input type="file" id="payReceipt" accept="image/*"
               style="display:block;width:100%;font-size:12px" onchange="previewPayReceipt(this)">
@@ -651,7 +657,8 @@ function confirmPay(instId, studentId) {
       payLink:      link,
       partialPaid:  newPartial,
       receiptImg:   receiptData || '',
-      receiptName:  file?.name || ''
+      receiptName:  file?.name || '',
+      voucherNo:    document.getElementById('payVoucherNo')?.value?.trim() || ''
     });
     DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
 
