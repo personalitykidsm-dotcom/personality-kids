@@ -719,7 +719,244 @@ function addMonths(dateStr, months) {
   return d.toISOString().split('T')[0];
 }
 
+// ===== EDIT STUDENT =====
+function openEditStudent(id) {
+  const s = DB.all('students').find(st => st.id === id);
+  if (!s) { showToast('⚠️ الطالب غير موجود'); return; }
+
+  const existingInst = DB.all('installments').filter(i => i.studentId === id);
+
+  const instRowsHtml = existingInst.map((inst, idx) => `
+    <tr data-inst-id="${inst.id}">
+      <td style="padding:6px 10px;color:var(--text-muted)">${idx + 1}</td>
+      <td style="padding:4px 6px">
+        <input type="number" class="inst-input inst-amt" value="${inst.amount}" step="0.001" min="0"
+          style="width:110px" oninput="updateInstTotal()">
+      </td>
+      <td style="padding:4px 6px">
+        <input type="date" class="inst-input inst-date" value="${inst.dueDate}">
+      </td>
+      <td style="padding:4px 6px">
+        <input type="text" class="inst-input inst-note" value="${inst.note||''}" placeholder="اختياري" style="width:120px">
+      </td>
+      <td style="padding:4px 6px;text-align:center">
+        ${inst.status === 'paid'
+          ? '<span style="color:var(--primary);font-size:12px">✅ مدفوع</span>'
+          : `<button onclick="this.closest('tr').remove();updateInstTotal()"
+               style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px">🗑</button>`
+        }
+      </td>
+    </tr>`).join('');
+
+  const html = `
+  <div id="modal-edit-student" class="modal-overlay open">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title">✏️ تعديل بيانات الطالب</div>
+        <button class="modal-close" onclick="closeModal('modal-edit-student')">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>الكود</label>
+            <input type="text" id="esId" value="${s.id}" readonly>
+          </div>
+          <div class="form-group">
+            <label>اسم الطالب *</label>
+            <input type="text" id="esName" value="${s.name}">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>المرحلة *</label>
+            <select id="esGrade">
+              ${getGrades().map(g=>`<option value="${g.id}" ${g.id===s.grade?'selected':''}>${g.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>الفرع *</label>
+            <select id="esBranch" ${currentUser?.role !== 'admin' ? 'disabled' : ''}>
+              ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>
+                `<option value="${k}" ${k===s.branch?'selected':''}>${v.name}</option>`
+              ).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>هاتف ولي الأمر 1 *</label>
+            <input type="tel" id="esPhone1" value="${s.phone1||''}">
+          </div>
+          <div class="form-group">
+            <label>هاتف ولي الأمر 2</label>
+            <input type="tel" id="esPhone2" value="${s.phone2||''}">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>تاريخ الميلاد</label>
+            <input type="date" id="esDob" value="${s.dob||''}">
+          </div>
+          <div class="form-group">
+            <label>تاريخ المباشرة *</label>
+            <input type="date" id="esStart" value="${s.startDate||''}">
+          </div>
+        </div>
+
+        <hr style="margin:14px 0;border-color:var(--border)">
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:12px">💰 الرسوم والأقساط</div>
+
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>الرسوم الإجمالية (د.ك) *</label>
+            <input type="number" id="esFees" value="${s.fees}" step="0.001" oninput="calcEditNet()">
+          </div>
+          <div class="form-group">
+            <label>الخصم (د.ك)</label>
+            <input type="number" id="esDiscount" value="${s.discount||0}" step="0.001" oninput="calcEditNet()">
+          </div>
+          <div class="form-group">
+            <label>الصافي (د.ك)</label>
+            <input type="number" id="esNet" value="${s.net||s.fees}" readonly>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>سبب الخصم</label>
+          <input type="text" id="esDiscountReason" value="${s.discountReason||''}">
+        </div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px">📅 الأقساط الحالية</div>
+          <div class="table-wrap" id="editInstTableWrap">
+            <table>
+              <thead><tr>
+                <th>#</th>
+                <th>المبلغ (د.ك)</th>
+                <th>تاريخ الاستحقاق</th>
+                <th>ملاحظة</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="instRows">${instRowsHtml}</tbody>
+              <tfoot>
+                <tr style="background:#f8f9fa">
+                  <td colspan="2" style="padding:8px 10px;font-weight:700">
+                    المجموع: <span id="instTotal" style="color:var(--primary)">0.000 د.ك</span>
+                  </td>
+                  <td colspan="3" style="padding:8px 10px">
+                    <span id="instDiff" style="font-size:11px"></span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addInstRow()">➕ إضافة قسط</button>
+        </div>
+
+        <div class="form-group">
+          <label>ملاحظات</label>
+          <textarea id="esNotes" rows="2">${s.notes||''}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('modal-edit-student')">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveEditStudent('${id}')">💾 حفظ التعديلات</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('modals').innerHTML = html;
+  updateInstTotal();
+}
+
+function calcEditNet() {
+  const fees = parseFloat(document.getElementById('esFees').value) || 0;
+  const disc = parseFloat(document.getElementById('esDiscount').value) || 0;
+  const net  = Math.max(0, fees - disc);
+  document.getElementById('esNet').value = net.toFixed(3);
+  updateInstTotal();
+}
+
+function saveEditStudent(id) {
+  const name  = document.getElementById('esName').value.trim();
+  const phone1= document.getElementById('esPhone1').value.trim();
+  const fees  = parseFloat(document.getElementById('esFees').value) || 0;
+
+  if (!name)  { showToast('⚠️ أدخل اسم الطالب'); return; }
+  if (!phone1){ showToast('⚠️ أدخل رقم الهاتف'); return; }
+  if (!fees)  { showToast('⚠️ أدخل الرسوم'); return; }
+
+  const students = DB.all('students');
+  const idx = students.findIndex(st => st.id === id);
+  if (idx === -1) { showToast('⚠️ الطالب غير موجود'); return; }
+
+  // Update student record
+  const updated = {
+    ...students[idx],
+    name,
+    branch:         document.getElementById('esBranch').value,
+    grade:          document.getElementById('esGrade').value,
+    phone1,
+    phone2:         document.getElementById('esPhone2').value.trim(),
+    dob:            document.getElementById('esDob').value,
+    startDate:      document.getElementById('esStart').value,
+    fees,
+    discount:       parseFloat(document.getElementById('esDiscount').value) || 0,
+    net:            parseFloat(document.getElementById('esNet').value) || fees,
+    discountReason: document.getElementById('esDiscountReason').value,
+    notes:          document.getElementById('esNotes').value
+  };
+  students[idx] = updated;
+  DB.save('students', students);
+
+  // Update installments: remove unpaid ones and re-save from table
+  const allInst = DB.all('installments');
+  const existingPaid = allInst.filter(i => i.studentId === id && i.status === 'paid');
+  const remainingOther = allInst.filter(i => i.studentId !== id);
+
+  const rows = document.querySelectorAll('#instRows tr');
+  const newInst = [];
+  rows.forEach((row, rowIdx) => {
+    const instId = row.getAttribute('data-inst-id');
+    const amt    = parseFloat(row.querySelector('.inst-amt').value) || 0;
+    const date   = row.querySelector('.inst-date').value;
+    const note   = row.querySelector('.inst-note').value;
+
+    if (instId) {
+      // existing installment — update values
+      const existing = allInst.find(i => i.id === instId);
+      if (existing) {
+        newInst.push({ ...existing, amount: amt, dueDate: date, note });
+      }
+    } else if (amt > 0) {
+      // new installment row
+      newInst.push({
+        id:        DB.nextId('installments', 'I'),
+        studentId: id,
+        num:       rowIdx + 1,
+        amount:    amt,
+        dueDate:   date,
+        paidDate:  '',
+        method:    '',
+        note,
+        status:    'pending'
+      });
+    }
+  });
+
+  DB.save('installments', [...remainingOther, ...existingPaid.filter(p => !newInst.find(n => n.id === p.id)), ...newInst]);
+
+  closeModal('modal-edit-student');
+  renderStudentsTable(activeGrade);
+  renderDashboard?.();
+  showToast('✅ تم حفظ التعديلات: ' + name);
+}
+
 // override stub
 window.openAddStudent          = openAddStudent;
 window.openStudentInstallments = openStudentInstallments;
-window.openEditStudent         = function(id) { showToast('تعديل الطالب — قريباً'); };
+window.openEditStudent         = openEditStudent;
