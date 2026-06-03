@@ -473,6 +473,15 @@ function openStudentInstallments(studentId) {
             <tbody id="instDetailRows">${rows}</tbody>
           </table>
         </div>
+
+        <!-- REFUNDS SECTION -->
+        <div style="margin-top:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:700;color:#8b5cf6">↩️ المرتجعات</div>
+            <button class="btn btn-outline btn-sm" style="color:#8b5cf6;border-color:#8b5cf6" onclick="openRefundModal('${studentId}')">➕ إضافة مرتجع</button>
+          </div>
+          <div id="refundsSection">${buildRefundsHtml(studentId)}</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="printInstallmentsPDF('${studentId}')">🖨️ طباعة PDF</button>
@@ -954,6 +963,159 @@ function saveEditStudent(id) {
   renderStudentsTable(activeGrade);
   renderDashboard?.();
   showToast('✅ تم حفظ التعديلات: ' + name);
+}
+
+// ===== REFUNDS =====
+function buildRefundsHtml(studentId) {
+  const refunds = DB.all('refunds').filter(r => r.studentId === studentId);
+  if (!refunds.length) {
+    return `<div style="text-align:center;padding:14px;color:var(--text-muted);font-size:13px">لا توجد مرتجعات</div>`;
+  }
+  const total = refunds.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const rows = refunds.map(r => `
+    <tr>
+      <td style="padding:8px 10px">${fmtDate(r.date)}</td>
+      <td style="padding:8px 10px;font-weight:700;color:#8b5cf6">${fmtKD(r.amount)}</td>
+      <td style="padding:8px 10px">${r.reason || '—'}</td>
+      <td style="padding:8px 10px;text-align:center">
+        ${r.attachmentImg
+          ? `<button class="btn btn-outline btn-sm" onclick="viewRefundAttachment('${r.id}')">📎 عرض</button>`
+          : '<span style="color:var(--text-muted);font-size:12px">—</span>'}
+      </td>
+      <td style="padding:8px 10px;text-align:center">
+        <button onclick="deleteRefund('${r.id}','${studentId}')"
+          style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">🗑</button>
+      </td>
+    </tr>`).join('');
+
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f3f0ff">
+          <th style="padding:8px 10px;text-align:right;font-weight:600">التاريخ</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">المبلغ</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">السبب</th>
+          <th style="padding:8px 10px;text-align:center;font-weight:600">المرفق</th>
+          <th style="padding:8px 10px"></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#f3f0ff">
+          <td colspan="5" style="padding:8px 10px;font-weight:700;color:#8b5cf6">
+            إجمالي المرتجعات: ${fmtKD(total)}
+          </td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+function openRefundModal(studentId) {
+  const s = DB.all('students').find(st => st.id === studentId);
+  if (!s) return;
+
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div id="modal-refund" class="modal-overlay open">
+      <div class="modal" style="max-width:500px">
+        <div class="modal-header">
+          <div class="modal-title">↩️ إضافة مرتجع — ${s.name}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-refund').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>المبلغ المرتجع (د.ك) *</label>
+              <input type="number" id="refAmount" step="0.001" min="0" placeholder="0.000">
+            </div>
+            <div class="form-group">
+              <label>تاريخ الإرجاع *</label>
+              <input type="date" id="refDate" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>سبب الإرجاع</label>
+            <input type="text" id="refReason" placeholder="اختياري">
+          </div>
+          <div class="form-group">
+            <label>مرفق (صورة الإيصال)</label>
+            <input type="file" id="refAttachment" accept="image/*,application/pdf"
+              style="padding:6px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            <div id="refAttachPreview" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('modal-refund').remove()">إلغاء</button>
+          <button class="btn btn-primary" style="background:#8b5cf6;border-color:#8b5cf6" onclick="saveRefund('${studentId}')">💾 حفظ المرتجع</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('modals').appendChild(div.firstElementChild);
+
+  // preview attachment
+  document.getElementById('refAttachment').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const prev = document.getElementById('refAttachPreview');
+      if (file.type.startsWith('image/')) {
+        prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid var(--border)">`;
+      } else {
+        prev.innerHTML = `<span style="font-size:12px;color:var(--primary)">📄 ${file.name}</span>`;
+      }
+      prev.dataset.b64 = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function saveRefund(studentId) {
+  const amount = parseFloat(document.getElementById('refAmount').value) || 0;
+  const date   = document.getElementById('refDate').value;
+  if (!amount) { showToast('⚠️ أدخل المبلغ المرتجع'); return; }
+  if (!date)   { showToast('⚠️ أدخل تاريخ الإرجاع'); return; }
+
+  const attachmentImg = document.getElementById('refAttachPreview').dataset.b64 || '';
+
+  DB.add('refunds', {
+    id:            DB.nextId('refunds', 'R'),
+    studentId,
+    amount,
+    date,
+    reason:        document.getElementById('refReason').value.trim(),
+    attachmentImg
+  });
+
+  document.getElementById('modal-refund').remove();
+  document.getElementById('refundsSection').innerHTML = buildRefundsHtml(studentId);
+  renderStudentsTable(activeGrade);
+  showToast('✅ تم تسجيل المرتجع');
+}
+
+function deleteRefund(refundId, studentId) {
+  if (!confirm('حذف هذا المرتجع؟')) return;
+  DB.delete('refunds', refundId);
+  document.getElementById('refundsSection').innerHTML = buildRefundsHtml(studentId);
+  renderStudentsTable(activeGrade);
+  showToast('🗑 تم حذف المرتجع');
+}
+
+function viewRefundAttachment(refundId) {
+  const r = DB.all('refunds').find(rf => rf.id === refundId);
+  if (!r || !r.attachmentImg) { showToast('لا يوجد مرفق'); return; }
+  const win = window.open('', '_blank', 'width=650,height=750');
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+    <title>مرفق المرتجع</title>
+    <style>body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
+    h3{color:#8b5cf6}img{max-width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15)}</style></head>
+    <body><h3>↩️ مرفق المرتجع</h3>
+    <p style="color:#666">التاريخ: ${fmtDate(r.date)} | المبلغ: ${fmtKD(r.amount)}</p>
+    <img src="${r.attachmentImg}" alt="مرفق">
+    <br><button onclick="window.print()" style="margin-top:16px;padding:10px 20px;background:#8b5cf6;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ طباعة</button>
+    </body></html>`);
+  win.document.close();
 }
 
 // override stub
