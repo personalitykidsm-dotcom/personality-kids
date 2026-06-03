@@ -77,6 +77,7 @@ const SB = {
 const TO_SNAKE = {
   studentId:'student_id', empId:'emp_id', empName:'emp_name',
   dueDate:'due_date', paidDate:'paid_date', startDate:'start_date',
+  attachmentImg:'attachment_img', discountReason:'discount_reason',
   fromDate:'from_date', toDate:'to_date', contractStart:'contract_start',
   contractEnd:'contract_end', contractType:'contract_type',
   annualLeave:'annual_leave', receiveDate:'receive_date',

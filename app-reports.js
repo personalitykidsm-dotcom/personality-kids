@@ -89,30 +89,38 @@ function feesFilter(el, status) {
 }
 
 function renderFeesTable(statusFilter) {
-  const searchVal = (document.getElementById('feesSearch')?.value || '').toLowerCase();
-  const students  = filterByBranch(DB.all('students')).filter(s =>
+  const searchVal  = (document.getElementById('feesSearch')?.value || '').toLowerCase();
+  const students   = filterByBranch(DB.all('students')).filter(s =>
     !searchVal || s.name.toLowerCase().includes(searchVal) || s.id.toLowerCase().includes(searchVal)
   );
-  const installs = DB.all('installments');
-  const today    = new Date();
+  const installs   = DB.all('installments');
+  const allRefunds = DB.all('refunds');
 
   let rows = students.map(s => {
-    const sInst = installs.filter(i => i.studentId === s.id);
-    const paid  = sInst.filter(i => i.status === 'paid').length;
-    const total = sInst.length;
-    const late  = sInst.some(i => i.status === 'pending' && daysUntil(i.dueDate) < 0);
-    const st    = studentStatus(s);
+    const sInst    = installs.filter(i => i.studentId === s.id);
+    const paid     = sInst.filter(i => i.status === 'paid').length;
+    const total    = sInst.length;
+    const late     = sInst.some(i => i.status === 'pending' && daysUntil(i.dueDate) < 0);
+    const st       = studentStatus(s);
+    const refunded = allRefunds.filter(r => r.studentId === s.id).reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
+    const netCol   = parseFloat((s.paid - refunded).toFixed(3));
 
-    if (statusFilter === 'paid'    && st.label !== 'مكتمل') return '';
-    if (statusFilter === 'pending' && (st.label === 'مكتمل' || late)) return '';
+    if (statusFilter === 'paid'    && st.label !== 'مكتمل' && st.label !== 'مرتجع') return '';
+    if (statusFilter === 'pending' && (st.label === 'مكتمل' || st.label === 'مرتجع' || late)) return '';
     if (statusFilter === 'late'    && !late) return '';
 
     const pct = s.net > 0 ? Math.round(s.paid / s.net * 100) : 0;
+    const refundCell = refunded > 0
+      ? `<td style="color:#8b5cf6;font-weight:700">${fmtKD(refunded)}</td><td style="color:var(--primary);font-weight:700">${fmtKD(netCol)}</td>`
+      : `<td style="color:var(--text-muted)">—</td><td style="color:var(--primary)">${fmtKD(s.paid)}</td>`;
+
     return `<tr>
       <td><b>${s.name}</b></td>
       <td><span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span></td>
       <td>${fmtKD(s.fees)}</td><td>${fmtKD(s.discount)}</td>
-      <td><b>${fmtKD(s.net)}</b></td><td style="color:var(--primary)">${fmtKD(s.paid)}</td>
+      <td><b>${fmtKD(s.net)}</b></td>
+      <td style="color:var(--primary)">${fmtKD(s.paid)}</td>
+      ${refundCell}
       <td style="color:var(--danger)">${fmtKD(s.net-s.paid)}</td>
       <td><div class="progress-bar" style="width:80px;display:inline-flex">
         <div class="progress-fill" style="width:${pct}%"></div></div> ${pct}%</td>
@@ -122,10 +130,11 @@ function renderFeesTable(statusFilter) {
     </tr>`;
   }).join('');
 
-  if (!rows.trim()) rows = `<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>`;
+  if (!rows.trim()) rows = `<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>`;
   document.getElementById('feesTable').innerHTML = `
     <thead><tr><th>الطالب</th><th>الفرع</th><th>الإجمالي</th><th>الخصم</th><th>الصافي</th>
-    <th>المدفوع</th><th>المتبقي</th><th>نسبة السداد</th><th>الأقساط</th><th>الحالة</th><th></th></tr></thead>
+    <th>المدفوع</th><th style="color:#8b5cf6">المرتجع</th><th>المحصّل الفعلي</th>
+    <th>المتبقي</th><th>نسبة السداد</th><th>الأقساط</th><th>الحالة</th><th></th></tr></thead>
     <tbody>${rows}</tbody>`;
 }
 
