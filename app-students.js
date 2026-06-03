@@ -1079,24 +1079,35 @@ function saveRefund(studentId) {
 
   const attachmentImg = document.getElementById('refAttachPreview').dataset.b64 || '';
 
-  DB.add('refunds', {
+  const newRefund = {
     id:            DB.nextId('refunds', 'R'),
     studentId,
     amount,
     date,
     reason:        document.getElementById('refReason').value.trim(),
     attachmentImg
-  });
+  };
+
+  // ensure cache exists before adding
+  if (!DB.all('refunds').length && typeof CACHE !== 'undefined') {
+    CACHE['refunds'] = CACHE['refunds'] || [];
+  }
+
+  DB.add('refunds', newRefund);
 
   document.getElementById('modal-refund').remove();
-  document.getElementById('refundsSection').innerHTML = buildRefundsHtml(studentId);
-  renderStudentsTable(activeGrade);
+  // rebuild after small delay to ensure cache is updated
+  setTimeout(() => {
+    const sec = document.getElementById('refundsSection');
+    if (sec) sec.innerHTML = buildRefundsHtml(studentId);
+    renderStudentsTable(activeGrade);
+  }, 150);
   showToast('✅ تم تسجيل المرتجع');
 }
 
 function deleteRefund(refundId, studentId) {
   if (!confirm('حذف هذا المرتجع؟')) return;
-  DB.delete('refunds', refundId);
+  DB.remove('refunds', refundId);
   document.getElementById('refundsSection').innerHTML = buildRefundsHtml(studentId);
   renderStudentsTable(activeGrade);
   showToast('🗑 تم حذف المرتجع');
