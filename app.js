@@ -599,3 +599,64 @@ function confirmRenew(studentId) {
   renderStudentsTable(activeGrade);
   showToast('✅ تم تجديد اشتراك ' + s.name + ' حتى ' + fmtDate(end));
 }
+function filterByBranch(arr) {
+  if (currentUser && !isAdmin(currentUser)) {
+    return arr.filter(i => i.branch === currentUser.branch);
+  }
+  if (!currentBranch || currentBranch === 'all') return arr;
+  return arr.filter(i => i.branch === currentBranch);
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => {
+    t.style.transform = 'translateX(-50%) translateY(80px)';
+  }, 3000);
+}
+
+// ============================================================
+// MODAL HELPERS
+// ============================================================
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  }
+});
+
+// ============================================================
+// STUBS — filled in next parts
+// ============================================================
+// openAddStudent defined in app-students.js
+// openEditStudent defined in app-students.js
+
+function deleteStudent(id, name) {
+  if (!confirm('هل تريد حذف الطالب "' + name + '"؟\nسيتم حذف جميع أقساطه أيضاً.')) return;
+  DB.remove('students', id);
+  const remaining = DB.all('installments').filter(i => i.studentId !== id);
+  DB.save('installments', remaining);
+  showToast('🗑️ تم حذف الطالب: ' + name);
+  renderStudentsTable(activeGrade);
+}
+// openStudentInstallments defined in app-students.js
+// exportStudentsExcel defined in app-students.js
+function renderFees()    {}
+function renderReports() {}
+function renderClothes() {}
+function renderSupplies(){}
+function renderMessages(){}
+function renderAutoreply(){}
+function renderHR()      {}
+function renderLicenses(){}
