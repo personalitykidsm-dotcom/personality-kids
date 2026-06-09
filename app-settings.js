@@ -251,7 +251,7 @@ function renderNurseryTab(cont) {
       <h3 style="margin-top:0">إعدادات الروضة</h3>
       <div class="form-group">
         <label>اسم الروضة</label>
-        <input id="stgName" class="form-control" value="${s.name||'روضة الأمل'}">
+        <input id="stgName" class="form-control" value="${s.name||'Personality Kids'}">
       </div>
       <div class="form-group">
         <label>رقم WhatsApp للمسؤول</label>

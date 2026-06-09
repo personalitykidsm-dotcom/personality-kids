@@ -78,6 +78,8 @@ const TO_SNAKE = {
   studentId:'student_id', empId:'emp_id', empName:'emp_name',
   dueDate:'due_date', paidDate:'paid_date', startDate:'start_date',
   attachmentImg:'attachment_img', discountReason:'discount_reason', voucherNo:'voucher_no',
+  enrollStatus:'enroll_status', subscriptionType:'subscription_type',
+  subscriptionEnd:'subscription_end', withdrawDate:'withdraw_date', joinDate:'join_date',
   fromDate:'from_date', toDate:'to_date', contractStart:'contract_start',
   contractEnd:'contract_end', contractType:'contract_type',
   annualLeave:'annual_leave', receiveDate:'receive_date',
@@ -270,7 +272,23 @@ function showLoadingScreen(show) {
 function daysUntil(d){ if(!d) return 9999; return Math.round((new Date(d)-new Date())/86400000); }
 function fmtDate(d){ if(!d) return '—'; return d.replace(/-/g,'/'); }
 function fmtKD(n){ return parseFloat(n||0).toFixed(3)+' د.ك'; }
+const EVENING_BRANCHES = ['esh_e','sol_e','mat_e'];
+function isEveningBranch(branch){ return EVENING_BRANCHES.includes(branch); }
+
 function studentStatus(s){
+  // Evening branch: show enrollment status
+  if (isEveningBranch(s.branch)) {
+    if (s.enrollStatus === 'withdrawn') return {label:'منسحب',  cls:'badge-red'};
+    if (s.enrollStatus === 'frozen')    return {label:'مجمّد',   cls:'badge-gray'};
+    // check subscription expiry
+    if (s.subscriptionEnd) {
+      const d = daysUntil(s.subscriptionEnd);
+      if (d < 0)  return {label:'منتهي',       cls:'badge-red'};
+      if (d <= 5) return {label:`ينتهي ${d}ي`, cls:'badge-orange'};
+    }
+    return {label:'نشط', cls:'badge-green'};
+  }
+  // Regular branch
   const refunds = (typeof DB !== 'undefined' ? DB.all('refunds') : []).filter(r => r.studentId === s.id);
   const totalRefunded = refunds.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   if (totalRefunded > 0) return {label:'مرتجع', cls:'badge-purple', refunded: totalRefunded};
@@ -278,6 +296,16 @@ function studentStatus(s){
   if(r<=0)      return {label:'مكتمل',     cls:'badge-green'};
   if(s.paid===0) return {label:'لم يُسدَّد',cls:'badge-red'};
   return               {label:'جزئي',      cls:'badge-orange'};
+}
+
+function getExpiringSubscriptions(withinDays=5){
+  return DB.all('students').filter(s =>
+    isEveningBranch(s.branch) &&
+    s.enrollStatus !== 'withdrawn' &&
+    s.subscriptionEnd &&
+    daysUntil(s.subscriptionEnd) >= 0 &&
+    daysUntil(s.subscriptionEnd) <= withinDays
+  );
 }
 function empStatus(e){
   if(e.status==='active') return {label:'نشط',    cls:'badge-green'};

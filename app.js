@@ -316,6 +316,15 @@ function renderDashboard() {
   if (expiring.length)
     alerts.push(`<div class="alert alert-warning">📦 <b>${expiring.length} أصناف</b> في المستهلكات تنتهي صلاحيتها قريباً</div>`);
 
+  // Evening subscriptions expiring within 5 days
+  const expiringSubscriptions = getExpiringSubscriptions(5);
+  if (expiringSubscriptions.length) {
+    const names = expiringSubscriptions.map(s => `<b>${s.name}</b> (${daysUntil(s.subscriptionEnd)} يوم)`).join('، ');
+    alerts.push(`<div class="alert alert-warning">🌙 اشتراكات المسائي تنتهي قريباً: ${names}
+      <button class="btn btn-outline btn-sm" style="margin-right:8px" onclick="setBranchFilter('esh_e',document.querySelector('[onclick*=esh_e]'));showPage('students')">عرض</button>
+    </div>`);
+  }
+
   if (!alerts.length)
     alerts.push(`<div class="alert alert-success">✅ لا توجد تنبيهات عاجلة</div>`);
 
@@ -340,6 +349,7 @@ function renderStudents() {
     <span class="filter-chip" onclick="gradeFilter('KG1',this)">KG1</span>
     <span class="filter-chip" onclick="gradeFilter('KG2',this)">KG2</span>
     <button class="btn btn-primary" style="margin-right:auto" onclick="openAddStudent()">➕ إضافة طالب</button>
+    <button class="btn btn-outline" id="archiveToggleBtn" onclick="toggleArchivedStudents(this)">🗄 الأرشيف</button>
     <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 Excel</button>
   `;
   // default grade chip active
@@ -372,9 +382,28 @@ function setBranchFilter(branch, el) {
   el.classList.add('active');
 }
 
+let showArchivedStudents = false;
+
+function toggleArchivedStudents(btn) {
+  showArchivedStudents = !showArchivedStudents;
+  btn.textContent = showArchivedStudents ? '👁 إخفاء الأرشيف' : '🗄 الأرشيف';
+  btn.classList.toggle('btn-primary', showArchivedStudents);
+  renderStudentsTable(activeGrade);
+}
+
 function renderStudentsTable(grade) {
   let list = filterByBranch(DB.all('students'));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
+
+  const isEveningView = EVENING_BRANCHES.includes(currentBranch);
+
+  if (isEveningView) {
+    if (showArchivedStudents) {
+      list = list.filter(s => s.enrollStatus === 'withdrawn');
+    } else {
+      list = list.filter(s => s.enrollStatus !== 'withdrawn');
+    }
+  }
 
   const grades     = getGrades();
   const gradeLabel = Object.fromEntries(grades.map(g=>[g.id, g.label]));
@@ -383,7 +412,31 @@ function renderStudentsTable(grade) {
   const rows = list.map(s => {
     const st  = studentStatus(s);
     const rem = s.net - s.paid;
-    return `<tr>
+    const evening = isEveningBranch(s.branch);
+
+    const subscriptionCells = evening ? `
+      <td style="font-size:12px">${s.subscriptionType==='monthly'?'شهري':s.subscriptionType==='weekly'?'أسبوعي':'يومي'}</td>
+      <td style="font-size:12px">${fmtDate(s.subscriptionEnd)||'—'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${fmtDate(s.joinDate||s.startDate)||'—'}</td>
+      ${s.enrollStatus==='withdrawn'?`<td style="font-size:12px;color:var(--danger)">${fmtDate(s.withdrawDate)||'—'}</td>`:'<td>—</td>'}
+    ` : `<td colspan="4" style="color:var(--text-muted);font-size:11px;text-align:center">—</td>`;
+
+    const actionBtns = evening ? `
+      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️</button>
+      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋</button>
+      ${s.enrollStatus !== 'withdrawn'
+        ? `<button class="btn btn-primary btn-sm" onclick="openRenewModal('${s.id}')">🔄 تجديد</button>
+           <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="withdrawStudent('${s.id}','${s.name}')">🚪</button>`
+        : `<button class="btn btn-outline btn-sm" style="color:var(--primary);border-color:var(--primary)" onclick="reactivateStudent('${s.id}')">↩️ إعادة</button>`
+      }
+      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
+    ` : `
+      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️</button>
+      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋</button>
+      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
+    `;
+
+    return `<tr style="${s.enrollStatus==='withdrawn'?'opacity:0.6':s.subscriptionEnd&&daysUntil(s.subscriptionEnd)<=5&&daysUntil(s.subscriptionEnd)>=0?'background:#fffbeb':''}">
       <td style="color:var(--text-muted)">${s.id}</td>
       <td><b>${s.name}</b></td>
       <td><span class="badge ${gradeBadge[s.grade]||'badge-gray'}">${gradeLabel[s.grade]||s.grade}</span></td>
@@ -395,86 +448,154 @@ function renderStudentsTable(grade) {
       <td>${fmtKD(s.net)}</td>
       <td style="color:var(--primary)">${fmtKD(s.paid)}</td>
       <td style="color:${rem>0?'var(--danger)':'var(--primary)'}">${fmtKD(rem)}</td>
+      ${subscriptionCells}
       <td><span class="badge ${st.cls}">${st.label}</span></td>
-      <td>
-        <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️</button>
-        <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋</button>
-        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
-      </td>
+      <td>${actionBtns}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>`;
+  }).join('') || `<tr><td colspan="17" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>`;
+
+  const eveningHeaders = isEveningView
+    ? `<th>نوع الاشتراك</th><th>انتهاء الاشتراك</th><th>تاريخ الانضمام</th><th>تاريخ الانسحاب</th>`
+    : `<th colspan="4"></th>`;
 
   document.getElementById('studentsTable').innerHTML = `
     <thead><tr>
       <th>الكود</th><th>الاسم</th><th>المرحلة</th><th>الفرع</th>
       <th>هاتف 1</th><th>هاتف 2</th><th>تاريخ الميلاد</th><th>تاريخ المباشرة</th>
-      <th>الصافي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>إجراءات</th>
+      <th>الصافي</th><th>المدفوع</th><th>المتبقي</th>
+      ${eveningHeaders}
+      <th>الحالة</th><th>إجراءات</th>
     </tr></thead>
     <tbody>${rows}</tbody>`;
 }
 
-// ============================================================
-// UTIL — filter by current branch
-// ============================================================
-function filterByBranch(arr) {
-  if (currentUser && !isAdmin(currentUser)) {
-    return arr.filter(i => i.branch === currentUser.branch);
-  }
-  if (!currentBranch || currentBranch === 'all') return arr;
-  return arr.filter(i => i.branch === currentBranch);
-}
+// ===== EVENING SUBSCRIPTION ACTIONS =====
 
-// ============================================================
-// TOAST
-// ============================================================
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.transform = 'translateX(-50%) translateY(0)';
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => {
-    t.style.transform = 'translateX(-50%) translateY(80px)';
-  }, 3000);
-}
-
-// ============================================================
-// MODAL HELPERS
-// ============================================================
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
-  }
-});
-
-// ============================================================
-// STUBS — filled in next parts
-// ============================================================
-// openAddStudent defined in app-students.js
-// openEditStudent defined in app-students.js
-
-function deleteStudent(id, name) {
-  if (!confirm('هل تريد حذف الطالب "' + name + '"؟\nسيتم حذف جميع أقساطه أيضاً.')) return;
-  DB.remove('students', id);
-  const remaining = DB.all('installments').filter(i => i.studentId !== id);
-  DB.save('installments', remaining);
-  showToast('🗑️ تم حذف الطالب: ' + name);
+function withdrawStudent(id, name) {
+  if (!confirm('تسجيل انسحاب ' + name + '؟')) return;
+  const today = new Date().toISOString().split('T')[0];
+  DB.update('students', id, { enrollStatus: 'withdrawn', withdrawDate: today });
   renderStudentsTable(activeGrade);
+  showToast('🚪 تم تسجيل انسحاب ' + name);
 }
-// openStudentInstallments defined in app-students.js
-// exportStudentsExcel defined in app-students.js
-function renderFees()    {}
-function renderReports() {}
-function renderClothes() {}
-function renderSupplies(){}
-function renderMessages(){}
-function renderAutoreply(){}
-function renderHR()      {}
-function renderLicenses(){}
-function renderSettings(){}
+
+function reactivateStudent(id) {
+  DB.update('students', id, { enrollStatus: 'active', withdrawDate: '' });
+  renderStudentsTable(activeGrade);
+  showToast('✅ تم إعادة تفعيل الطالب');
+}
+
+function openRenewModal(studentId) {
+  const s = DB.all('students').find(st => st.id === studentId);
+  if (!s) return;
+  const today = new Date().toISOString().split('T')[0];
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div id="modal-renew" class="modal-overlay open">
+      <div class="modal" style="max-width:460px">
+        <div class="modal-header">
+          <div class="modal-title">🔄 تجديد اشتراك — ${s.name}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-renew').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="background:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+            <span style="color:var(--text-muted)">انتهاء الاشتراك الحالي:</span>
+            <b style="color:var(--primary)">${fmtDate(s.subscriptionEnd||today)}</b>
+          </div>
+          <div class="form-group">
+            <label>نوع الاشتراك</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap" id="renewTypeChips">
+              <div class="pay-chip ${(!s.subscriptionType||s.subscriptionType==='monthly')?'selected':''}" onclick="selRenewType(this)">📅 شهري</div>
+              <div class="pay-chip ${s.subscriptionType==='weekly'?'selected':''}" onclick="selRenewType(this)">🗓 أسبوعي</div>
+              <div class="pay-chip ${s.subscriptionType==='daily'?'selected':''}" onclick="selRenewType(this)">☀️ يومي</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>تاريخ بداية الاشتراك الجديد</label>
+              <input type="date" id="renewStart" value="${today}"
+                style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%"
+                onchange="calcRenewEnd()">
+            </div>
+            <div class="form-group">
+              <label>تاريخ الانتهاء</label>
+              <input type="date" id="renewEnd"
+                style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>رسوم الاشتراك (د.ك) *</label>
+            <input type="number" id="renewFee" step="0.001" min="0" placeholder="0.000"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+          <div class="form-group">
+            <label>ملاحظة</label>
+            <input type="text" id="renewNote" placeholder="اختياري"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('modal-renew').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="confirmRenew('${studentId}')">✅ تأكيد التجديد</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modals').appendChild(div.firstElementChild);
+  calcRenewEnd();
+}
+
+function selRenewType(el) {
+  el.closest('#renewTypeChips').querySelectorAll('.pay-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  calcRenewEnd();
+}
+
+function calcRenewEnd() {
+  const start = document.getElementById('renewStart')?.value;
+  if (!start) return;
+  const label = document.querySelector('#renewTypeChips .pay-chip.selected')?.textContent || '';
+  const d = new Date(start);
+  if (label.includes('شهري'))       d.setMonth(d.getMonth() + 1);
+  else if (label.includes('أسبوعي')) d.setDate(d.getDate() + 7);
+  document.getElementById('renewEnd').value = d.toISOString().split('T')[0];
+}
+
+function confirmRenew(studentId) {
+  const fee   = parseFloat(document.getElementById('renewFee').value) || 0;
+  const end   = document.getElementById('renewEnd').value;
+  const start = document.getElementById('renewStart').value;
+  const note  = document.getElementById('renewNote').value.trim();
+  const label = document.querySelector('#renewTypeChips .pay-chip.selected')?.textContent || '';
+  const type  = label.includes('شهري') ? 'monthly' : label.includes('أسبوعي') ? 'weekly' : 'daily';
+
+  if (!fee) { showToast('⚠️ أدخل رسوم الاشتراك'); return; }
+  if (!end) { showToast('⚠️ أدخل تاريخ الانتهاء'); return; }
+
+  const s = DB.all('students').find(st => st.id === studentId);
+  if (!s) return;
+
+  DB.update('students', studentId, {
+    subscriptionType: type,
+    subscriptionEnd:  end,
+    enrollStatus:     'active',
+    fees: (s.fees||0) + fee,
+    net:  (s.net||0)  + fee
+  });
+
+  DB.add('installments', {
+    id:          DB.nextId('installments','I'),
+    studentId,
+    num:         DB.all('installments').filter(i => i.studentId === studentId).length + 1,
+    amount:      fee,
+    partialPaid: 0,
+    dueDate:     start,
+    paidDate:    '',
+    status:      'pending',
+    method:      '',
+    note:        note || ('اشتراك ' + (type==='monthly'?'شهري':type==='weekly'?'أسبوعي':'يومي'))
+  });
+
+  document.getElementById('modal-renew').remove();
+  renderStudentsTable(activeGrade);
+  showToast('✅ تم تجديد اشتراك ' + s.name + ' حتى ' + fmtDate(end));
+}

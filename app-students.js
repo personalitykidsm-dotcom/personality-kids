@@ -148,6 +148,25 @@ function openAddStudent() {
           <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addInstRow()">➕ إضافة قسط</button>
         </div>
 
+        <div id="eveningSubscriptionFields" style="display:none">
+          <hr style="margin:14px 0;border-color:var(--border)">
+          <div style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">🌙 بيانات اشتراك المسائي</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>نوع الاشتراك</label>
+              <select id="sSubType" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+                <option value="monthly">📅 شهري</option>
+                <option value="weekly">🗓 أسبوعي</option>
+                <option value="daily">☀️ يومي</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>تاريخ انتهاء الاشتراك</label>
+              <input type="date" id="sSubEnd" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            </div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>ملاحظات</label>
           <textarea id="sNotes" rows="2"></textarea>
@@ -175,6 +194,14 @@ function openAddStudent() {
   } else if (currentBranch !== 'all') {
     branchSel.value = currentBranch;
   }
+
+  // show evening fields if evening branch selected
+  function toggleEveningFields() {
+    const isEvening = isEveningBranch(document.getElementById('sBranch').value);
+    document.getElementById('eveningSubscriptionFields').style.display = isEvening ? '' : 'none';
+  }
+  branchSel.addEventListener('change', toggleEveningFields);
+  toggleEveningFields();
 }
 
 // ===== NET CALCULATION =====
@@ -278,20 +305,27 @@ function saveStudent() {
   if (!fees)  { showToast('⚠️ أدخل الرسوم'); return; }
 
   const id = document.getElementById('sId').value;
+  const branch = document.getElementById('sBranch').value;
+  const isEvening = isEveningBranch(branch);
   const student = {
     id,
     name,
-    branch:    document.getElementById('sBranch').value,
-    grade:     document.getElementById('sGrade').value,
+    branch,
+    grade:           document.getElementById('sGrade').value,
     phone1,
-    phone2:    document.getElementById('sPhone2').value.trim(),
-    dob:       document.getElementById('sDob').value,
-    startDate: document.getElementById('sStart').value,
+    phone2:          document.getElementById('sPhone2').value.trim(),
+    dob:             document.getElementById('sDob').value,
+    startDate:       document.getElementById('sStart').value,
+    joinDate:        document.getElementById('sStart').value,
     fees,
-    discount:  parseFloat(document.getElementById('sDiscount').value) || 0,
-    net:       parseFloat(document.getElementById('sNet').value) || fees,
-    paid:      0,
-    notes:     document.getElementById('sNotes').value
+    discount:        parseFloat(document.getElementById('sDiscount').value) || 0,
+    net:             parseFloat(document.getElementById('sNet').value) || fees,
+    paid:            0,
+    notes:           document.getElementById('sNotes').value,
+    enrollStatus:    isEvening ? 'active' : '',
+    subscriptionType:isEvening ? (document.getElementById('sSubType')?.value || 'monthly') : '',
+    subscriptionEnd: isEvening ? (document.getElementById('sSubEnd')?.value || '') : '',
+    withdrawDate:    ''
   };
 
   DB.add('students', student);
@@ -368,7 +402,7 @@ function printStudentForm() {
       .sig-line{border-bottom:1px solid #333;width:150px;margin:0 auto 6px}
       @media print{.no-print{display:none}}
     </style></head><body>
-    <h2>🌟 روضة الأمل — استمارة تسجيل طالب</h2>
+    <h2>🌟 Personality Kids — استمارة تسجيل طالب</h2>
 
     <h3>📋 بيانات الطالب</h3>
     <table class="info-table">
@@ -710,7 +744,7 @@ function printInstallmentsPDF(studentId) {
       th{background:#f0f0f0;font-weight:600}
       @media print{button{display:none}}
     </style></head><body>
-    <h2>🌟 روضة الأمل — خطة أقساط</h2>
+    <h2>🌟 Personality Kids — خطة أقساط</h2>
     <div class="info">
       <span><b>الطالب:</b> ${s.name}</span>
       <span><b>الفرع:</b> ${BRANCHES[s.branch].name}</span>

@@ -1388,7 +1388,7 @@ function printReport(title, headers, rows) {
     h2{color:#1a9e6a;margin-bottom:12px}
     table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:8px;text-align:right}
     th{background:#f0f0f0}@media print{button{display:none}}</style></head><body>
-    <h2>🌟 روضة الأمل — ${title}</h2>
+    <h2>🌟 Personality Kids — ${title}</h2>
     <p style="font-size:11px;color:#888;margin-bottom:12px">تاريخ التقرير: ${new Date().toLocaleDateString('ar-KW')}</p>
     <table><thead>${thead}</thead><tbody>${tbody}</tbody></table>
     <br><button onclick="window.print()">🖨️ طباعة</button></body></html>`);
