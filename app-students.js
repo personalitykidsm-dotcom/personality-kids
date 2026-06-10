@@ -853,7 +853,7 @@ function openEditStudent(id) {
 
         <div class="form-row">
           <div class="form-group">
-            <label>هاتف ولي الأمر 1 *</label>
+            <label>هاتف ولي الأمر 1</label>
             <input type="tel" id="esPhone1" value="${s.phone1||''}">
           </div>
           <div class="form-group">
@@ -870,6 +870,25 @@ function openEditStudent(id) {
           <div class="form-group">
             <label>تاريخ المباشرة *</label>
             <input type="date" id="esStart" value="${s.startDate||''}">
+          </div>
+        </div>
+
+        <div id="esEveningFields" style="display:${isEveningBranch(s.branch)?'block':'none'}">
+          <hr style="margin:14px 0;border-color:var(--border)">
+          <div style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">🌙 بيانات اشتراك المسائي</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>نوع الاشتراك</label>
+              <select id="esSubType" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+                <option value="monthly" ${(s.subscriptionType||'monthly')==='monthly'?'selected':''}>📅 شهري</option>
+                <option value="weekly"  ${s.subscriptionType==='weekly'?'selected':''}>🗓 أسبوعي</option>
+                <option value="daily"   ${s.subscriptionType==='daily'?'selected':''}>☀️ يومي</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>تاريخ انتهاء الاشتراك</label>
+              <input type="date" id="esSubEnd" value="${s.subscriptionEnd||''}" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            </div>
           </div>
         </div>
 
@@ -937,6 +956,11 @@ function openEditStudent(id) {
 
   document.getElementById('modals').innerHTML = html;
   updateInstTotal();
+
+  // toggle evening fields when branch changes
+  document.getElementById('esBranch').addEventListener('change', function() {
+    document.getElementById('esEveningFields').style.display = isEveningBranch(this.value) ? 'block' : 'none';
+  });
 }
 
 function calcEditNet() {
@@ -953,7 +977,6 @@ function saveEditStudent(id) {
   const fees  = parseFloat(document.getElementById('esFees').value) || 0;
 
   if (!name)  { showToast('⚠️ أدخل اسم الطالب'); return; }
-  if (!phone1){ showToast('⚠️ أدخل رقم الهاتف'); return; }
   if (!fees)  { showToast('⚠️ أدخل الرسوم'); return; }
 
   const students = DB.all('students');
@@ -961,20 +984,25 @@ function saveEditStudent(id) {
   if (idx === -1) { showToast('⚠️ الطالب غير موجود'); return; }
 
   // Update student record
+  const esBranch = document.getElementById('esBranch').value;
+  const esIsEvening = isEveningBranch(esBranch);
   const updated = {
     ...students[idx],
     name,
-    branch:         document.getElementById('esBranch').value,
-    grade:          document.getElementById('esGrade').value,
+    branch:           esBranch,
+    grade:            document.getElementById('esGrade').value,
     phone1,
-    phone2:         document.getElementById('esPhone2').value.trim(),
-    dob:            document.getElementById('esDob').value,
-    startDate:      document.getElementById('esStart').value,
+    phone2:           document.getElementById('esPhone2').value.trim(),
+    dob:              document.getElementById('esDob').value,
+    startDate:        document.getElementById('esStart').value,
+    joinDate:         students[idx].joinDate || document.getElementById('esStart').value,
     fees,
-    discount:       parseFloat(document.getElementById('esDiscount').value) || 0,
-    net:            parseFloat(document.getElementById('esNet').value) || fees,
-    discountReason: document.getElementById('esDiscountReason').value,
-    notes:          document.getElementById('esNotes').value
+    discount:         parseFloat(document.getElementById('esDiscount').value) || 0,
+    net:              parseFloat(document.getElementById('esNet').value) || fees,
+    discountReason:   document.getElementById('esDiscountReason').value,
+    notes:            document.getElementById('esNotes').value,
+    subscriptionType: esIsEvening ? (document.getElementById('esSubType')?.value || students[idx].subscriptionType || 'monthly') : students[idx].subscriptionType,
+    subscriptionEnd:  esIsEvening ? (document.getElementById('esSubEnd')?.value || students[idx].subscriptionEnd || '') : students[idx].subscriptionEnd,
   };
   students[idx] = updated;
   DB.save('students', students);
