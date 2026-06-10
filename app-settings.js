@@ -443,17 +443,21 @@ function renderDataTab(cont) {
 
 function exportAllData() {
   const data = {};
-  ['students','installments','employees','leaves','attendance','supplies','clothes',
-   'licenses','users','autoRules','nurserySettings','licenseReminderDays'].forEach(k => {
-    data[k] = localStorage.getItem('pk_' + k)
-      ? JSON.parse(localStorage.getItem('pk_' + k)) : null;
+  Object.keys(TABLES).forEach(k => { data[k] = CACHE[k] || []; });
+  // settings (key/value rows stored under CACHE['s_'+key])
+  const settingsRows = [];
+  Object.keys(CACHE).forEach(k => {
+    if (k.startsWith('s_')) settingsRows.push({ key: k.slice(2), value: CACHE[k] });
   });
+  data.settings = settingsRows;
+
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
   a.download = 'nursery_backup_' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
-  showToast('✅ تم تصدير البيانات');
+  const summary = Object.keys(TABLES).map(k => `${k}:${(CACHE[k]||[]).length}`).join(', ');
+  showToast('✅ تم تصدير البيانات — ' + summary);
 }
 
 function importDataClick() {
@@ -464,15 +468,26 @@ function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const data = JSON.parse(ev.target.result);
-      Object.entries(data).forEach(([k, v]) => {
-        if (v !== null) localStorage.setItem('pk_' + k, JSON.stringify(v));
-      });
-      showToast('✅ تم استيراد البيانات — أعد تحميل الصفحة');
-    } catch {
-      showToast('❌ ملف غير صالح');
+      const keys = Object.keys(TABLES).filter(k => Array.isArray(data[k]) && data[k].length);
+      if (!keys.length && !(Array.isArray(data.settings) && data.settings.length)) {
+        showToast('⚠️ الملف لا يحتوي بيانات قابلة للاستيراد (نسخة قديمة؟)');
+        return;
+      }
+      showToast('⏳ جارِ استيراد البيانات...');
+      for (const key of keys) {
+        await SB.upsert(TABLES[key], data[key]);
+      }
+      if (Array.isArray(data.settings) && data.settings.length) {
+        await SB.upsert('settings', data.settings);
+      }
+      showToast('✅ تم استيراد البيانات — جارِ إعادة التحميل');
+      setTimeout(()=>location.reload(), 1500);
+    } catch (err) {
+      console.error('import error:', err);
+      showToast('❌ ملف غير صالح: ' + err.message);
     }
   };
   reader.readAsText(file);

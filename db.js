@@ -68,6 +68,15 @@ const SB = {
       method:'DELETE', headers: this.h()
     });
     if (!r.ok) { console.error('SB.delete error:', await r.text()); }
+  },
+  async upsert(table, rows) {
+    if (!rows || !rows.length) return;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method:'POST',
+      headers: this.h({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) { console.error('SB.upsert error:', table, await r.text()); throw new Error('upsert failed: '+table); }
   }
 };
 
