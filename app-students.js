@@ -685,21 +685,20 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
-    // Core fields — guaranteed to exist in Supabase
+    // Core fields — confirmed to exist in Supabase installments schema
     DB.update('installments', instId, {
-      status:      newStatus,
-      paidDate:    date,
-      method,
-      partialPaid: newPartial
+      status:   newStatus,
+      paidDate: date,
+      method
     });
     DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
 
-    // Optional fields — update cache only (won't break if columns missing in Supabase)
-    const optionalChanges = { payLink: link, receiptImg: receiptData || '', receiptName: file?.name || '', voucherNo: document.getElementById('payVoucherNo')?.value?.trim() || '' };
-    const optSnake = {};
-    for (const [k,v] of Object.entries(optionalChanges)) optSnake[TO_SNAKE[k]||k] = v;
+    // Extra fields — update cache only (columns may not exist in Supabase)
+    const extras = { partialPaid: newPartial, payLink: link, receiptImg: receiptData || '', receiptName: file?.name || '', voucherNo: document.getElementById('payVoucherNo')?.value?.trim() || '' };
+    const extSnake = {};
+    for (const [k,v] of Object.entries(extras)) extSnake[TO_SNAKE[k]||k] = v;
     if (typeof CACHE !== 'undefined') {
-      CACHE['installments'] = (CACHE['installments']||[]).map(i => i.id === instId ? {...i, ...optSnake} : i);
+      CACHE['installments'] = (CACHE['installments']||[]).map(i => i.id === instId ? {...i, ...extSnake} : i);
     }
 
     document.getElementById('modal-pay').remove();
@@ -1257,4 +1256,5 @@ window.saveEditStudent         = saveEditStudent;
 window.openRefundModal         = openRefundModal;
 window.saveRefund              = saveRefund;
 window.deleteRefund            = deleteRefund;
-window.viewRefundAttachment    = viewRefundAtt
+window.viewRefundAttachment    = viewRefundAttachment;
+        prev.i
