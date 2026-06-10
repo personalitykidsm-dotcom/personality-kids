@@ -755,4 +755,71 @@ function showStudentsImportPreview(students) {
   <div id="modal-students-import" class="modal-overlay open">
     <div class="modal" style="max-width:1000px">
       <div class="modal-header">
-        <div class="modal-title">📤 معاي�
+        <div class="modal-title">📤 معاينة استيراد الطلاب — ${students.length} صف</div>
+        <button class="modal-close" onclick="document.getElementById('modal-students-import').remove()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px">
+        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <span class="badge badge-green">✅ سيُستورد: ${valid}</span>
+          ${invalid?`<span class="badge badge-red">⚠️ سيُتجاوز: ${invalid}</span>`:''}
+          <span style="font-size:12px;color:var(--text-muted)">الصفوف الحمراء لن تُستورد</span>
+        </div>
+        <div style="overflow:auto;max-height:420px">
+          <table class="data-table" style="font-size:12px;white-space:nowrap">
+            <thead><tr>
+              <th>#</th><th>الاسم</th><th>الفرع</th><th>المرحلة</th>
+              <th>هاتف</th><th>المباشرة</th><th>الرسوم</th><th>الخصم</th><th>المسدد</th>
+              <th>نوع الاشتراك</th><th>انتهاء الاشتراك</th><th>ملاحظة</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('modal-students-import').remove()">إلغاء</button>
+        ${valid ? `<button class="btn btn-primary" onclick="doImportStudents()">✅ استيراد ${valid} طالب</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+  window._importStudentsPending = students;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function doImportStudents() {
+  const students = window._importStudentsPending || [];
+  const valid    = students.filter(s=>!s.errors.length);
+  const existing = DB.all('students');
+  let added = 0, skipped = 0;
+
+  valid.forEach(s => {
+    const id = s.idRaw || DB.nextId('students','S');
+    if (existing.find(x=>x.id===id)) { skipped++; return; }
+    const evening = isEveningBranch(s.branch);
+    DB.add('students', {
+      id, name: s.name,
+      branch: s.branch, grade: s.grade,
+      phone1: s.phone1, phone2: s.phone2,
+      dob: s.dob, startDate: s.startDate, joinDate: s.startDate,
+      fees: s.fees, discount: s.disc, net: s.net, paid: s.paid,
+      enrollStatus:     evening ? 'active' : '',
+      subscriptionType: evening ? (s.subType||'monthly') : '',
+      subscriptionEnd:  evening ? s.subEnd : '',
+      withdrawDate: '',
+      notes: s.notes
+    });
+    DB.add('installments', {
+      id: DB.nextId('installments','I'),
+      studentId: id, num: 1,
+      amount: s.net, partialPaid: s.paid,
+      dueDate: s.startDate,
+      paidDate: s.paid > 0 ? (s.payDate || new Date().toISOString().split('T')[0]) : '',
+      status: s.paid >= s.net ? 'paid' : s.paid > 0 ? 'partial' : 'pending',
+      method: s.paid > 0 ? s.method : '',
+      note: ''
+    });
+    added++;
+  });
+
+  document.getElementById('modal-students-import').remove();
+  showToast('تم استيراد ' + added + ' طالب' + (skipped?' | تجاوز '+skipped:''));
+}

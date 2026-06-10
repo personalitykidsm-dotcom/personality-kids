@@ -1316,7 +1316,6 @@ function addMonths(dateStr, months) {
   return d.toISOString().split('T')[0];
 }
 
-// ===== EXCEL IMPORT =====
 const BRANCH_NAME_MAP = {
   'اشبيلية':          'esh',
   'الصليبخات':        'sol',
@@ -1327,4 +1326,164 @@ const BRANCH_NAME_MAP = {
 };
 const SUB_TYPE_MAP = {
   'شهري':'monthly', 'monthly':'monthly',
-  'أسبوعي':'weekly', 'weekly':'weekl
+  'اسبوعي':'weekly', 'weekly':'weekly',
+  'يومي':'daily',   'daily':'daily'
+};
+
+function downloadStudentTemplate() {
+  const headers = ['الاسم','الفرع','المرحلة','هاتف 1','هاتف 2','تاريخ الميلاد','تاريخ المباشرة','الرسوم','الخصم','نوع الاشتراك','انتهاء الاشتراك','ملاحظات'];
+  const example = ['محمد احمد','اشبيلية مسائي','حضانة','12345678','','2022-01-15','2026-06-01','50','0','شهري','2026-07-01',''];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  ws['!cols'] = headers.map(()=>({wch:18}));
+  XLSX.utils.book_append_sheet(wb, ws, 'طلاب');
+  XLSX.writeFile(wb, 'قالب_استيراد_طلاب.xlsx');
+}
+
+function importStudentsExcel() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.xlsx,.xls,.csv';
+  inp.onchange = e => processImportFile(e.target.files[0]);
+  inp.click();
+}
+
+function processImportFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    if (!rows.length) { showToast('الملف فارغ'); return; }
+
+    const students = rows.map((r,i) => {
+      const name       = (r['الاسم']||'').toString().trim();
+      const branchRaw  = (r['الفرع']||'').toString().trim();
+      const branch     = BRANCH_NAME_MAP[branchRaw] || branchRaw;
+      const gradeRaw   = (r['المرحلة']||'').toString().trim();
+      const grade      = gradeRaw.startsWith('KG1')?'KG1':gradeRaw.startsWith('KG2')?'KG2':'nursery';
+      const phone1     = (r['هاتف 1']||r['هاتف1']||'').toString().trim();
+      const phone2     = (r['هاتف 2']||r['هاتف2']||'').toString().trim();
+      const dob        = fmtImportDate(r['تاريخ الميلاد']);
+      const startDate  = fmtImportDate(r['تاريخ المباشرة']);
+      const fees       = parseFloat(r['الرسوم'])||0;
+      const discount   = parseFloat(r['الخصم'])||0;
+      const net        = fees - discount;
+      const subTypeRaw = (r['نوع الاشتراك']||'').toString().trim();
+      const subType    = SUB_TYPE_MAP[subTypeRaw] || (isEveningBranch(branch)?'monthly':'');
+      const subEnd     = fmtImportDate(r['انتهاء الاشتراك']);
+      const notes      = (r['ملاحظات']||'').toString().trim();
+      const errors = [];
+      if (!name)   errors.push('الاسم مطلوب');
+      if (!branch || !BRANCHES[branch]) errors.push('فرع غير صحيح: '+branchRaw);
+      if (!fees)   errors.push('الرسوم مطلوبة');
+      return { _row:i+2, name, branch, grade, phone1, phone2, dob, startDate, fees, discount, net, subType, subEnd, notes, errors };
+    });
+
+    showImportPreview(students);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function fmtImportDate(v) {
+  if (!v) return '';
+  if (v instanceof Date) return v.toISOString().split('T')[0];
+  const s = v.toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (!isNaN(d)) return d.toISOString().split('T')[0];
+  return s;
+}
+
+function showImportPreview(students) {
+  const validCount   = students.filter(s=>!s.errors.length).length;
+  const invalidCount = students.filter(s=>s.errors.length).length;
+  const rows = students.map(s => `
+    <tr style="${s.errors.length?'background:#fff3f3':''}">
+      <td>${s._row}</td>
+      <td>${s.name||'—'}</td>
+      <td>${(BRANCHES[s.branch]||{}).name||s.branch||'—'}</td>
+      <td>${s.grade==='nursery'?'حضانة':s.grade}</td>
+      <td>${s.phone1||'—'}</td>
+      <td>${s.startDate||'—'}</td>
+      <td>${s.fees}</td>
+      <td style="color:var(--danger);font-size:12px">${s.errors.join(', ')}</td>
+    </tr>`).join('');
+
+  const html = `
+  <div id="modal-import" class="modal-overlay open">
+    <div class="modal" style="max-width:900px">
+      <div class="modal-header">
+        <div class="modal-title">معاينة الاستيراد — ${students.length} طالب</div>
+        <button class="modal-close" onclick="document.getElementById('modal-import').remove()">x</button>
+      </div>
+      <div class="modal-body" style="padding:16px">
+        <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <span class="badge badge-green">سيُستورد: ${validCount}</span>
+          ${invalidCount?'<span class="badge badge-red">بيانات ناقصة: '+invalidCount+'</span>':''}
+        </div>
+        <div style="overflow:auto;max-height:400px">
+          <table class="data-table" style="font-size:13px">
+            <thead><tr>
+              <th>#</th><th>الاسم</th><th>الفرع</th><th>المرحلة</th>
+              <th>هاتف</th><th>المباشرة</th><th>الرسوم</th><th>ملاحظة</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('modal-import').remove()">إلغاء</button>
+        ${validCount ? '<button class="btn btn-primary" onclick="confirmImportStudents()">استيراد '+validCount+' طالب</button>' : ''}
+      </div>
+    </div>
+  </div>`;
+  window._importPending = students;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function confirmImportStudents(students) {
+  if (!students) students = window._importPending || [];
+  const valid = students.filter(s => !s.errors || !s.errors.length);
+  let count = 0;
+  valid.forEach(s => {
+    const id = DB.nextId('students', 'S');
+    DB.add('students', {
+      id,
+      name:             s.name,
+      branch:           s.branch,
+      grade:            s.grade,
+      phone1:           s.phone1||'',
+      phone2:           s.phone2||'',
+      dob:              s.dob||'',
+      startDate:        s.startDate||'',
+      joinDate:         s.startDate||'',
+      fees:             s.fees,
+      discount:         s.discount||0,
+      net:              s.net||s.fees,
+      paid:             0,
+      notes:            s.notes||'',
+      enrollStatus:     isEveningBranch(s.branch)?'active':'',
+      subscriptionType: s.subType||'',
+      subscriptionEnd:  s.subEnd||'',
+      withdrawDate:     ''
+    });
+    count++;
+  });
+  document.getElementById('modal-import').remove();
+  showToast('تم استيراد ' + count + ' طالب');
+  renderStudentsTable(activeGrade);
+}
+
+window.openAddStudent          = openAddStudent;
+window.openStudentInstallments = openStudentInstallments;
+window.openEditStudent         = openEditStudent;
+window.saveEditStudent         = saveEditStudent;
+window.openRefundModal         = openRefundModal;
+window.saveRefund              = saveRefund;
+window.deleteRefund            = deleteRefund;
+window.viewRefundAttachment    = viewRefundAttachment;
+window.importStudentsExcel     = importStudentsExcel;
+window.downloadStudentTemplate = downloadStudentTemplate;
+window.confirmImportStudents   = confirmImportStudents;
