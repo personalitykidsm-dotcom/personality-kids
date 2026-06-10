@@ -1006,7 +1006,7 @@ function saveEditStudent(id) {
     subscriptionEnd:  esIsEvening ? (document.getElementById('esSubEnd')?.value || students[idx].subscriptionEnd || '') : students[idx].subscriptionEnd,
   };
   students[idx] = updated;
-  // Persist student update to Supabase
+  // Persist student update to Supabase (only columns that exist in the schema)
   DB.update('students', id, {
     name,
     branch:           esBranch,
@@ -1019,7 +1019,6 @@ function saveEditStudent(id) {
     fees:             updated.fees,
     discount:         updated.discount,
     net:              updated.net,
-    discountReason:   updated.discountReason,
     notes:            updated.notes,
     subscriptionType: updated.subscriptionType,
     subscriptionEnd:  updated.subscriptionEnd,
@@ -1181,75 +1180,4 @@ function openRefundModal(studentId) {
     reader.onload = e => {
       const prev = document.getElementById('refAttachPreview');
       if (file.type.startsWith('image/')) {
-        prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:150px;border-radius:8px;border:1px solid var(--border)">`;
-      } else {
-        prev.innerHTML = `<span style="font-size:12px;color:var(--primary)">📄 ${file.name}</span>`;
-      }
-      prev.dataset.b64 = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function saveRefund(studentId) {
-  const amount = parseFloat(document.getElementById('refAmount').value) || 0;
-  const date   = document.getElementById('refDate').value;
-  if (!amount) { showToast('⚠️ أدخل المبلغ المرتجع'); return; }
-  if (!date)   { showToast('⚠️ أدخل تاريخ الإرجاع'); return; }
-
-  const attachmentImg = document.getElementById('refAttachPreview').dataset.b64 || '';
-
-  const newRefund = {
-    id:            DB.nextId('refunds', 'R'),
-    studentId,
-    amount,
-    date,
-    reason:        document.getElementById('refReason').value.trim(),
-    attachmentImg
-  };
-
-  // ensure cache exists before adding
-  if (!DB.all('refunds').length && typeof CACHE !== 'undefined') {
-    CACHE['refunds'] = CACHE['refunds'] || [];
-  }
-
-  DB.add('refunds', newRefund);
-
-  document.getElementById('modal-refund').remove();
-  // rebuild after small delay to ensure cache is updated
-  setTimeout(() => {
-    const sec = document.getElementById('refundsSection');
-    if (sec) sec.innerHTML = buildRefundsHtml(studentId);
-    renderStudentsTable(activeGrade);
-  }, 150);
-  showToast('✅ تم تسجيل المرتجع');
-}
-
-function deleteRefund(refundId, studentId) {
-  if (!confirm('حذف هذا المرتجع؟')) return;
-  DB.remove('refunds', refundId);
-  document.getElementById('refundsSection').innerHTML = buildRefundsHtml(studentId);
-  renderStudentsTable(activeGrade);
-  showToast('🗑 تم حذف المرتجع');
-}
-
-function viewRefundAttachment(refundId) {
-  const r = DB.all('refunds').find(rf => rf.id === refundId);
-  if (!r || !r.attachmentImg) { showToast('لا يوجد مرفق'); return; }
-  const win = window.open('', '_blank', 'width=650,height=750');
-  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-    <title>مرفق المرتجع</title>
-    <style>body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
-    h3{color:#8b5cf6}img{max-width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15)}</style></head>
-    <body><h3>↩️ مرفق المرتجع</h3>
-    <p style="color:#666">التاريخ: ${fmtDate(r.date)} | المبلغ: ${fmtKD(r.amount)}</p>
-    <img src="${r.attachmentImg}" alt="مرفق">
-    <br><button onclick="window.print()" style="margin-top:16px;padding:10px 20px;background:#8b5cf6;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ طباعة</button>
-    </body></html>`);
-  win.document.close();
-}
-
-// override stub
-window.openAddStudent          = openAddStudent;
-window.openStudentInstallments = openStudentInstallments;
-window.openEditStudent         = openEditStudent;
+  
