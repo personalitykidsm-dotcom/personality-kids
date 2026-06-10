@@ -685,17 +685,22 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
+    // Core fields — guaranteed to exist in Supabase
     DB.update('installments', instId, {
-      status:       newStatus,
-      paidDate:     date,
+      status:      newStatus,
+      paidDate:    date,
       method,
-      payLink:      link,
-      partialPaid:  newPartial,
-      receiptImg:   receiptData || '',
-      receiptName:  file?.name || '',
-      voucherNo:    document.getElementById('payVoucherNo')?.value?.trim() || ''
+      partialPaid: newPartial
     });
     DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
+
+    // Optional fields — update cache only (won't break if columns missing in Supabase)
+    const optionalChanges = { payLink: link, receiptImg: receiptData || '', receiptName: file?.name || '', voucherNo: document.getElementById('payVoucherNo')?.value?.trim() || '' };
+    const optSnake = {};
+    for (const [k,v] of Object.entries(optionalChanges)) optSnake[TO_SNAKE[k]||k] = v;
+    if (typeof CACHE !== 'undefined') {
+      CACHE['installments'] = (CACHE['installments']||[]).map(i => i.id === instId ? {...i, ...optSnake} : i);
+    }
 
     document.getElementById('modal-pay').remove();
     openStudentInstallments(studentId);
@@ -1252,4 +1257,4 @@ window.saveEditStudent         = saveEditStudent;
 window.openRefundModal         = openRefundModal;
 window.saveRefund              = saveRefund;
 window.deleteRefund            = deleteRefund;
-window.v
+window.viewRefundAttachment    = viewRefundAtt
