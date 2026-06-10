@@ -600,14 +600,34 @@ function readExcelFile(file, callback) {
 }
 
 function downloadStudentsTemplate() {
-  xlsxExport([{
-    'الكود':'S001','الاسم':'أحمد محمد الرشيد',
-    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','المرحلة (nursery/KG1/KG2)':'KG1',
-    'هاتف 1':'96550001','هاتف 2':'',
-    'تاريخ الميلاد (YYYY-MM-DD)':'2020-03-15',
-    'تاريخ المباشرة (YYYY-MM-DD)':'2023-09-01',
-    'الرسوم':'1200','الخصم':'0','المسدد':'0','تاريخ الدفع (YYYY-MM-DD)':'','طريقة الدفع (نقدي/برنامج/كي نت/رابط)':'نقدي','ملاحظات':''
-  }], 'نموذج_الطلاب');
+  // Row 1: example morning branch student
+  // Row 2: example evening branch student
+  xlsxExport([
+    {
+      'الكود':'S001',
+      'الاسم':'أحمد محمد الرشيد',
+      'الفرع':'اشبيلية',
+      'المرحلة':'KG1',
+      'هاتف 1':'96550001','هاتف 2':'',
+      'تاريخ الميلاد':'2020-03-15',
+      'تاريخ المباشرة':'2023-09-01',
+      'الرسوم':1200,'الخصم':0,'المسدد':0,
+      'تاريخ الدفع':'','طريقة الدفع':'نقدي',
+      'نوع الاشتراك':'','انتهاء الاشتراك':'','ملاحظات':''
+    },
+    {
+      'الكود':'S002',
+      'الاسم':'سارة علي الكندري',
+      'الفرع':'اشبيلية مسائي',
+      'المرحلة':'حضانة',
+      'هاتف 1':'96560002','هاتف 2':'',
+      'تاريخ الميلاد':'2022-05-10',
+      'تاريخ المباشرة':'2026-06-01',
+      'الرسوم':50,'الخصم':0,'المسدد':50,
+      'تاريخ الدفع':'2026-06-01','طريقة الدفع':'نقدي',
+      'نوع الاشتراك':'شهري','انتهاء الاشتراك':'2026-07-01','ملاحظات':''
+    }
+  ], 'نموذج_الطلاب');
 }
 
 function downloadClothesTemplate() {
@@ -650,120 +670,89 @@ function excelDateToStr(val) {
   return String(val).replace(/\//g, '-').slice(0, 10);
 }
 
+// branch & grade name → key mapping
+const _BRANCH_MAP = {
+  'اشبيلية':'esh','الصليبخات':'sol','المطلاع':'mat',
+  'اشبيلية مسائي':'esh_e','الصليبخات مسائي':'sol_e','المطلاع مسائي':'mat_e',
+  'esh':'esh','sol':'sol','mat':'mat','esh_e':'esh_e','sol_e':'sol_e','mat_e':'mat_e'
+};
+const _GRADE_MAP = {
+  'حضانة':'nursery','nursery':'nursery',
+  'KG1':'KG1','كي جي 1':'KG1',
+  'KG2':'KG2','كي جي 2':'KG2'
+};
+const _SUBTYPE_MAP = {
+  'شهري':'monthly','monthly':'monthly',
+  'أسبوعي':'weekly','weekly':'weekly',
+  'يومي':'daily','daily':'daily'
+};
+const _PAY_METHOD_MAP = {
+  'نقدي':'نقدي','برنامج':'برنامج','كي نت':'كي نت','رابط':'رابط',
+  'cash':'نقدي','knet':'كي نت'
+};
+
 function importStudentsFromExcel(e) {
   const file = e.target.files[0]; if (!file) return;
   readExcelFile(file, rows => {
-    let added = 0, skipped = 0;
-    const existing = DB.all('students');
-    rows.forEach(r => {
-      const name = r['الاسم']||''; if (!name) { skipped++; return; }
-      const id = String(r['الكود']||'') || DB.nextId('students','S');
-      if (existing.find(s=>s.id===id)) { skipped++; return; }
-      const fees=parseFloat(r['الرسوم'])||0, disc=parseFloat(r['الخصم'])||0;
-      const net = Math.max(0, fees - disc);
-      const paid = Math.min(parseFloat(r['المسدد'])||0, net);
-      DB.add('students',{
-        id, name,
-        branch:    r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
-        grade:     r['المرحلة (nursery/KG1/KG2)']||'KG1',
-        phone1:    String(r['هاتف 1']||''),
-        phone2:    String(r['هاتف 2']||''),
-        dob:       excelDateToStr(r['تاريخ الميلاد (YYYY-MM-DD)']||''),
-        startDate: excelDateToStr(r['تاريخ المباشرة (YYYY-MM-DD)']||''),
-        fees, discount:disc, net, paid,
-        notes: r['ملاحظات']||''
-      });
-      // auto-create one installment
-      const instStatus = paid >= net ? 'paid' : paid > 0 ? 'partial' : 'pending';
-      const instId2 = DB.nextId('installments','I');
-      DB.add('installments',{
-        id: instId2, studentId: id, num:1,
-        amount: net, partialPaid: paid,
-        dueDate: excelDateToStr(r['تاريخ المباشرة (YYYY-MM-DD)']||''),
-        paidDate: paid > 0 ? (excelDateToStr(r['تاريخ الدفع (YYYY-MM-DD)']||'') || new Date().toISOString().split('T')[0]) : '',
-        status: instStatus, method: paid > 0 ? (r['طريقة الدفع (نقدي/برنامج/كي نت/رابط)']||'نقدي') : ''
-      });
-      added++;
+    // parse rows into structured preview data
+    const parsed = rows.map((r, i) => {
+      const name      = (r['الاسم']||'').toString().trim();
+      const branchRaw = (r['الفرع']||r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'').toString().trim();
+      const branch    = _BRANCH_MAP[branchRaw] || branchRaw;
+      const gradeRaw  = (r['المرحلة']||r['المرحلة (nursery/KG1/KG2)']||'').toString().trim();
+      const grade     = _GRADE_MAP[gradeRaw] || (gradeRaw.startsWith('KG1')?'KG1':gradeRaw.startsWith('KG2')?'KG2':'nursery');
+      const phone1    = (r['هاتف 1']||r['هاتف1']||'').toString().trim();
+      const phone2    = (r['هاتف 2']||r['هاتف2']||'').toString().trim();
+      const dob       = excelDateToStr(r['تاريخ الميلاد']||r['تاريخ الميلاد (YYYY-MM-DD)']||'');
+      const startDate = excelDateToStr(r['تاريخ المباشرة']||r['تاريخ المباشرة (YYYY-MM-DD)']||'');
+      const fees      = parseFloat(r['الرسوم'])||0;
+      const disc      = parseFloat(r['الخصم'])||0;
+      const net       = Math.max(0, fees - disc);
+      const paid      = Math.min(parseFloat(r['المسدد'])||0, net);
+      const payDate   = excelDateToStr(r['تاريخ الدفع']||r['تاريخ الدفع (YYYY-MM-DD)']||'');
+      const method    = _PAY_METHOD_MAP[(r['طريقة الدفع']||r['طريقة الدفع (نقدي/برنامج/كي نت/رابط)']||'نقدي').toString().trim()] || 'نقدي';
+      const subTypeRaw= (r['نوع الاشتراك']||'').toString().trim();
+      const subType   = _SUBTYPE_MAP[subTypeRaw] || (isEveningBranch(branch)?'monthly':'');
+      const subEnd    = excelDateToStr(r['انتهاء الاشتراك']||'');
+      const notes     = (r['ملاحظات']||'').toString().trim();
+      const idRaw     = String(r['الكود']||'').trim();
+
+      const errors = [];
+      if (!name)  errors.push('الاسم مطلوب');
+      if (!BRANCHES[branch]) errors.push('فرع غير معروف: '+branchRaw);
+      if (!fees && !isEveningBranch(branch)) errors.push('الرسوم مطلوبة');
+
+      return { _row:i+2, idRaw, name, branch, grade, phone1, phone2, dob, startDate,
+               fees, disc, net, paid, payDate, method, subType, subEnd, notes, errors };
     });
-    showToast(`✅ تم استيراد ${added} طالب${skipped?' | تجاوز '+skipped:''}`);
+
+    window._importStudentsPending = parsed;
+    showStudentsImportPreview(parsed);
     e.target.value='';
   });
 }
 
-function importClothesFromExcel(e) {
-  const file = e.target.files[0]; if (!file) return;
-  readExcelFile(file, rows => {
-    let added=0, skipped=0;
-    const existing = DB.all('clothes');
-    rows.forEach(r => {
-      const name=r['الصنف']||''; if(!name){skipped++;return;}
-      const id=String(r['الكود']||'')||DB.nextId('clothes','C');
-      if(existing.find(c=>c.id===id)){skipped++;return;}
-      DB.add('clothes',{
-        id, name,
-        size:   r['المقاس']||'',
-        branch: r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
-        qty:    parseInt(r['الكمية'])||0,
-        minQty: parseInt(r['الحد الأدنى'])||5
-      });
-      added++;
-    });
-    showToast(`✅ تم استيراد ${added} صنف ملابس${skipped?' | تجاوز '+skipped:''}`);
-    e.target.value='';
-  });
-}
+function showStudentsImportPreview(students) {
+  const valid   = students.filter(s=>!s.errors.length).length;
+  const invalid = students.filter(s=>s.errors.length).length;
+  const rows = students.map(s => `
+    <tr style="${s.errors.length?'background:#fff0f0':''}">
+      <td style="font-size:11px;color:#999">${s._row}</td>
+      <td><b>${s.name||'—'}</b></td>
+      <td>${(BRANCHES[s.branch]||{}).name||s.branch||'—'}</td>
+      <td>${s.grade==='nursery'?'حضانة':s.grade}</td>
+      <td>${s.phone1||'—'}</td>
+      <td>${s.startDate||'—'}</td>
+      <td>${s.fees}</td>
+      <td>${s.disc}</td>
+      <td style="color:${s.paid>0?'var(--primary)':'inherit'}">${s.paid}</td>
+      <td style="font-size:11px">${s.subType==='monthly'?'شهري':s.subType==='weekly'?'أسبوعي':s.subType==='daily'?'يومي':''}</td>
+      <td style="font-size:11px">${s.subEnd||''}</td>
+      <td style="color:var(--danger);font-size:11px">${s.errors.join(', ')}</td>
+    </tr>`).join('');
 
-function importSuppliesFromExcel(e) {
-  const file = e.target.files[0]; if (!file) return;
-  readExcelFile(file, rows => {
-    let added=0, skipped=0;
-    const existing = DB.all('supplies');
-    rows.forEach(r => {
-      const name=r['الصنف']||''; if(!name){skipped++;return;}
-      const id=String(r['الكود']||'')||DB.nextId('supplies','P');
-      if(existing.find(s=>s.id===id)){skipped++;return;}
-      DB.add('supplies',{
-        id, name,
-        unit:        r['الوحدة']||'',
-        branch:      r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
-        qty:         parseFloat(r['الكمية'])||0,
-        receiveDate: excelDateToStr(r['تاريخ الاستلام (YYYY-MM-DD)']||''),
-        expiryDate:  excelDateToStr(r['تاريخ الانتهاء (YYYY-MM-DD)']||'')
-      });
-      added++;
-    });
-    showToast(`✅ تم استيراد ${added} مستهلك${skipped?' | تجاوز '+skipped:''}`);
-    e.target.value='';
-  });
-}
-
-function importEmployeesFromExcel(e) {
-  const file = e.target.files[0]; if (!file) return;
-  readExcelFile(file, rows => {
-    let added=0, skipped=0;
-    const existing = DB.all('employees');
-    rows.forEach(r => {
-      const name=r['الاسم']||''; if(!name){skipped++;return;}
-      const id=String(r['الكود']||'')||DB.nextId('employees','E');
-      if(existing.find(emp=>emp.id===id)){skipped++;return;}
-      DB.add('employees',{
-        id, name,
-        role:          r['الوظيفة']||'',
-        branch:        r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'esh',
-        nationality:   r['الجنسية']||'',
-        phone:         String(r['الهاتف']||''),
-        idNo:          String(r['رقم الهوية']||''),
-        salary:        parseFloat(r['الراتب'])||0,
-        allowance:     parseFloat(r['البدل'])||0,
-        contractStart: excelDateToStr(r['بداية العقد (YYYY-MM-DD)']||''),
-        contractEnd:   excelDateToStr(r['نهاية العقد (YYYY-MM-DD)']||''),
-        contractType:  r['نوع العقد']||'دوام كامل',
-        annualLeave:   parseInt(r['الإجازة السنوية'])||21,
-        status:        r['الحالة (active/leave/inactive)']||'active'
-      });
-      added++;
-    });
-    showToast(`✅ تم استيراد ${added} موظف${skipped?' | تجاوز '+skipped:''}`);
-    e.target.value='';
-  });
-}
+  const html = `
+  <div id="modal-students-import" class="modal-overlay open">
+    <div class="modal" style="max-width:1000px">
+      <div class="modal-header">
+        <div class="modal-title">📤 معاي�

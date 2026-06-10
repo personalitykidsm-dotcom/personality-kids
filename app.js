@@ -353,7 +353,7 @@ function renderStudents() {
       style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:220px;font-family:inherit">
     <button class="btn btn-primary" style="margin-right:auto" onclick="openAddStudent()">➕ إضافة طالب</button>
     <button class="btn btn-outline" id="archiveToggleBtn" onclick="toggleArchivedStudents(this)">🗄 الأرشيف</button>
-    <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 Excel</button>
+    <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 تصدير Excel</button>
   `;
   // default grade chip active
   document.getElementById('gradeAll').classList.add('active');
@@ -665,4 +665,4 @@ function deleteStudent(id, name) {
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }
-// openStudentInstallments def
+// openStudentInsta

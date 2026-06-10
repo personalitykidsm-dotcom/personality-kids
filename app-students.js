@@ -1316,11 +1316,15 @@ function addMonths(dateStr, months) {
   return d.toISOString().split('T')[0];
 }
 
-window.openAddStudent          = openAddStudent;
-window.openStudentInstallments = openStudentInstallments;
-window.openEditStudent         = openEditStudent;
-window.saveEditStudent         = saveEditStudent;
-window.openRefundModal         = openRefundModal;
-window.saveRefund              = saveRefund;
-window.deleteRefund            = deleteRefund;
-window.viewRefundAttachment    = viewRefundAttachment;
+// ===== EXCEL IMPORT =====
+const BRANCH_NAME_MAP = {
+  'اشبيلية':          'esh',
+  'الصليبخات':        'sol',
+  'المطلاع':          'mat',
+  'اشبيلية مسائي':   'esh_e',
+  'الصليبخات مسائي': 'sol_e',
+  'المطلاع مسائي':   'mat_e'
+};
+const SUB_TYPE_MAP = {
+  'شهري':'monthly', 'monthly':'monthly',
+  'أسبوعي':'weekly', 'weekly':'weekl
