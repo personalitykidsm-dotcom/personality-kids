@@ -430,18 +430,18 @@ function renderStudentsTable(grade) {
     ` : `<td colspan="4" style="color:var(--text-muted);font-size:11px;text-align:center">—</td>`;
 
     const actionBtns = evening ? `
-      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️</button>
-      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋</button>
+      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️ تعديل</button>
+      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋 الأقساط</button>
       ${s.enrollStatus !== 'withdrawn'
         ? `<button class="btn btn-primary btn-sm" onclick="openRenewModal('${s.id}')">🔄 تجديد</button>
-           <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="withdrawStudent('${s.id}','${s.name}')">🚪</button>`
+           <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="withdrawStudent('${s.id}','${s.name}')">🚪 انسحاب</button>`
         : `<button class="btn btn-outline btn-sm" style="color:var(--primary);border-color:var(--primary)" onclick="reactivateStudent('${s.id}')">↩️ إعادة</button>`
       }
-      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
+      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️ حذف</button>
     ` : `
-      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️</button>
-      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋</button>
-      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
+      <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️ تعديل</button>
+      <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋 الأقساط</button>
+      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️ حذف</button>
     `;
 
     const showFinancials = isAdmin(currentUser);
@@ -665,6 +665,4 @@ function deleteStudent(id, name) {
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }
-// openStudentInstallments defined in app-students.js
-// exportStudentsExcel defined in app-students.js
-funct
+// openStudentInstallments def
