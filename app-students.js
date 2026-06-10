@@ -281,7 +281,8 @@ function addInstRow() {
 function updateInstTotal() {
   const amts  = Array.from(document.querySelectorAll('.inst-amt')).map(i => parseFloat(i.value) || 0);
   const total = amts.reduce((a, b) => a + b, 0);
-  const net   = parseFloat(document.getElementById('sNet').value) || 0;
+  const netEl = document.getElementById('sNet') || document.getElementById('esNet');
+  const net   = parseFloat(netEl?.value) || 0;
   const diff  = parseFloat((total - net).toFixed(3));
 
   document.getElementById('instTotal').textContent = total.toFixed(3) + ' د.ك';
@@ -1005,15 +1006,34 @@ function saveEditStudent(id) {
     subscriptionEnd:  esIsEvening ? (document.getElementById('esSubEnd')?.value || students[idx].subscriptionEnd || '') : students[idx].subscriptionEnd,
   };
   students[idx] = updated;
-  DB.save('students', students);
+  // Persist student update to Supabase
+  DB.update('students', id, {
+    name,
+    branch:           esBranch,
+    grade:            updated.grade,
+    phone1:           updated.phone1,
+    phone2:           updated.phone2,
+    dob:              updated.dob,
+    startDate:        updated.startDate,
+    joinDate:         updated.joinDate,
+    fees:             updated.fees,
+    discount:         updated.discount,
+    net:              updated.net,
+    discountReason:   updated.discountReason,
+    notes:            updated.notes,
+    subscriptionType: updated.subscriptionType,
+    subscriptionEnd:  updated.subscriptionEnd,
+  });
 
-  // Update installments: remove unpaid ones and re-save from table
+  // Update installments: delete removed ones, update/insert the rest
   const allInst = DB.all('installments');
-  const existingPaid = allInst.filter(i => i.studentId === id && i.status === 'paid');
+  const originalStudentInst = allInst.filter(i => i.studentId === id);
   const remainingOther = allInst.filter(i => i.studentId !== id);
 
   const rows = document.querySelectorAll('#instRows tr');
   const newInst = [];
+  const seenIds = new Set();
+
   rows.forEach((row, rowIdx) => {
     const instId = row.getAttribute('data-inst-id');
     const amt    = parseFloat(row.querySelector('.inst-amt').value) || 0;
@@ -1024,11 +1044,14 @@ function saveEditStudent(id) {
       // existing installment — update values
       const existing = allInst.find(i => i.id === instId);
       if (existing) {
-        newInst.push({ ...existing, amount: amt, dueDate: date, note });
+        seenIds.add(instId);
+        const updInst = { ...existing, amount: amt, dueDate: date, note };
+        newInst.push(updInst);
+        DB.update('installments', instId, { amount: amt, dueDate: date, note });
       }
     } else if (amt > 0) {
       // new installment row
-      newInst.push({
+      const ni = {
         id:        DB.nextId('installments', 'I'),
         studentId: id,
         num:       rowIdx + 1,
@@ -1038,11 +1061,23 @@ function saveEditStudent(id) {
         method:    '',
         note,
         status:    'pending'
-      });
+      };
+      newInst.push(ni);
+      DB.add('installments', ni);
     }
   });
 
-  DB.save('installments', [...remainingOther, ...existingPaid.filter(p => !newInst.find(n => n.id === p.id)), ...newInst]);
+  // Delete installments that were removed from the DOM (unpaid only)
+  originalStudentInst
+    .filter(i => i.status !== 'paid' && !seenIds.has(i.id))
+    .forEach(i => DB.remove('installments', i.id));
+
+  // Update cache
+  CACHE['installments'] = [...remainingOther, ...newInst].map(i => {
+    const out = {};
+    for (const [k, v] of Object.entries(i)) out[TO_SNAKE[k] || k] = v;
+    return out;
+  });
 
   closeModal('modal-edit-student');
   renderStudentsTable(activeGrade);
