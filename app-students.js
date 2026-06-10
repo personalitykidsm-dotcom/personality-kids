@@ -1180,4 +1180,76 @@ function openRefundModal(studentId) {
     reader.onload = e => {
       const prev = document.getElementById('refAttachPreview');
       if (file.type.startsWith('image/')) {
-  
+        prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:6px">`;
+      } else {
+        prev.innerHTML = `<span style="font-size:12px;color:var(--text-muted)">📄 ${file.name}</span>`;
+      }
+      prev._data = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function saveRefund(studentId) {
+  const amount = parseFloat(document.getElementById('refAmount').value) || 0;
+  const date   = document.getElementById('refDate').value;
+  const reason = document.getElementById('refReason').value.trim();
+  const prev   = document.getElementById('refAttachPreview');
+
+  if (!amount || amount <= 0) { showToast('⚠️ أدخل مبلغ صحيح'); return; }
+  if (!date) { showToast('⚠️ أدخل التاريخ'); return; }
+
+  const refund = {
+    id:            DB.nextId('refunds', 'R'),
+    studentId,
+    amount,
+    date,
+    reason,
+    attachmentImg: prev?._data || ''
+  };
+
+  DB.add('refunds', refund);
+
+  document.getElementById('modal-refund').remove();
+  renderStudentsTable(activeGrade);
+  showToast('✅ تم حفظ المرتجع');
+}
+
+function deleteRefund(refundId, studentId) {
+  if (!confirm('حذف هذا المرتجع؟')) return;
+  DB.remove('refunds', refundId);
+  renderStudentsTable(activeGrade);
+  showToast('🗑 تم حذف المرتجع');
+}
+
+function viewRefundAttachment(refundId) {
+  const r = DB.all('refunds').find(x => x.id === refundId);
+  if (!r || !r.attachmentImg) { showToast('لا يوجد مرفق'); return; }
+  const win = window.open('', '_blank', 'width=600,height=700');
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+    <title>مرفق المرتجع</title>
+    <style>body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
+    h3{color:#8b5cf6}img{max-width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15)}</style></head>
+    <body><h3>📎 مرفق المرتجع</h3>
+    <img src="${r.attachmentImg}" alt="مرفق">
+    <br><button onclick="window.print()" style="margin-top:16px;padding:10px 20px;background:#8b5cf6;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ طباعة</button>
+    </body></html>`);
+  win.document.close();
+}
+
+// ===== HELPER =====
+function addMonths(dateStr, months) {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split('T')[0];
+}
+
+// Global exports
+window.openAddStudent          = openAddStudent;
+window.openStudentInstallments = openStudentInstallments;
+window.openEditStudent         = openEditStudent;
+window.saveEditStudent         = saveEditStudent;
+window.openRefundModal         = openRefundModal;
+window.saveRefund              = saveRefund;
+window.deleteRefund            = deleteRefund;
+window.v
