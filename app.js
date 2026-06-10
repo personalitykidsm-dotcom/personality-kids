@@ -334,20 +334,23 @@ function renderDashboard() {
 // ============================================================
 // STUDENTS
 // ============================================================
+let studentSearchQuery = '';
+
 function renderStudents() {
   const container = document.getElementById('studentsFilter');
   container.innerHTML = `
-    <span class="filter-chip ${currentBranch==='all'?'active':''}" onclick="setBranchFilter('all',this)">كل الفروع</span>
-    <span class="filter-chip ${currentBranch==='esh'?'active':''}" onclick="setBranchFilter('esh',this)">اشبيلية</span>
-    <span class="filter-chip ${currentBranch==='sol'?'active':''}" onclick="setBranchFilter('sol',this)">الصليبخات</span>
-    <span class="filter-chip ${currentBranch==='mat'?'active':''}" onclick="setBranchFilter('mat',this)">المطلاع</span>
-    <span class="filter-chip ${currentBranch==='esh_e'?'active':''}" onclick="setBranchFilter('esh_e',this)">اشبيلية مسائي</span>
-    <span class="filter-chip ${currentBranch==='sol_e'?'active':''}" onclick="setBranchFilter('sol_e',this)">الصليبخات مسائي</span>
-    <span class="filter-chip ${currentBranch==='mat_e'?'active':''}" onclick="setBranchFilter('mat_e',this)">المطلاع مسائي</span>
+    ${isAdmin(currentUser)
+      ? Object.entries(BRANCHES).map(([k,v]) => `<span class="filter-chip ${currentBranch===k?'active':''}" onclick="setBranchFilter('${k}',this)">${v.name}</span>`).join('')
+      : `<span class="filter-chip active">${BRANCHES[currentBranch]?.name || ''}</span>`
+    }
     <span class="filter-chip" id="gradeAll" onclick="gradeFilter('all',this)">كل المراحل</span>
     <span class="filter-chip" onclick="gradeFilter('nursery',this)">حضانة</span>
     <span class="filter-chip" onclick="gradeFilter('KG1',this)">KG1</span>
     <span class="filter-chip" onclick="gradeFilter('KG2',this)">KG2</span>
+    <input type="text" id="studentSearch" placeholder="🔍 بحث باسم الطالب أو الكود..."
+      value="${studentSearchQuery}"
+      oninput="studentSearchQuery=this.value;renderStudentsTable(activeGrade)"
+      style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:220px;font-family:inherit">
     <button class="btn btn-primary" style="margin-right:auto" onclick="openAddStudent()">➕ إضافة طالب</button>
     <button class="btn btn-outline" id="archiveToggleBtn" onclick="toggleArchivedStudents(this)">🗄 الأرشيف</button>
     <button class="btn btn-outline" onclick="exportStudentsExcel()">📥 Excel</button>
@@ -394,6 +397,11 @@ function toggleArchivedStudents(btn) {
 function renderStudentsTable(grade) {
   let list = filterByBranch(DB.all('students'));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
+  // Search filter
+  if (studentSearchQuery && studentSearchQuery.trim()) {
+    const q = studentSearchQuery.trim().toLowerCase();
+    list = list.filter(s => s.name?.toLowerCase().includes(q) || s.id?.toLowerCase().includes(q) || s.phone1?.includes(q));
+  }
 
   const isEveningView = EVENING_BRANCHES.includes(currentBranch);
 
@@ -436,6 +444,13 @@ function renderStudentsTable(grade) {
       <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️</button>
     `;
 
+    const showFinancials = isAdmin(currentUser);
+    const financialCells = showFinancials
+      ? `<td>${fmtKD(s.net)}</td>
+         <td style="color:var(--primary)">${fmtKD(s.paid)}</td>
+         <td style="color:${rem>0?'var(--danger)':'var(--primary)'}">${fmtKD(rem)}</td>`
+      : '';
+
     return `<tr style="${s.enrollStatus==='withdrawn'?'opacity:0.6':s.subscriptionEnd&&daysUntil(s.subscriptionEnd)<=5&&daysUntil(s.subscriptionEnd)>=0?'background:#fffbeb':''}">
       <td style="color:var(--text-muted)">${s.id}</td>
       <td><b>${s.name}</b></td>
@@ -445,9 +460,7 @@ function renderStudentsTable(grade) {
       <td>${s.phone2||'—'}</td>
       <td>${fmtDate(s.dob)}</td>
       <td>${fmtDate(s.startDate)}</td>
-      <td>${fmtKD(s.net)}</td>
-      <td style="color:var(--primary)">${fmtKD(s.paid)}</td>
-      <td style="color:${rem>0?'var(--danger)':'var(--primary)'}">${fmtKD(rem)}</td>
+      ${financialCells}
       ${subscriptionCells}
       <td><span class="badge ${st.cls}">${st.label}</span></td>
       <td>${actionBtns}</td>
@@ -458,11 +471,13 @@ function renderStudentsTable(grade) {
     ? `<th>نوع الاشتراك</th><th>انتهاء الاشتراك</th><th>تاريخ الانضمام</th><th>تاريخ الانسحاب</th>`
     : `<th colspan="4"></th>`;
 
+  const showFinancialHeaders = isAdmin(currentUser);
+
   document.getElementById('studentsTable').innerHTML = `
     <thead><tr>
       <th>الكود</th><th>الاسم</th><th>المرحلة</th><th>الفرع</th>
       <th>هاتف 1</th><th>هاتف 2</th><th>تاريخ الميلاد</th><th>تاريخ المباشرة</th>
-      <th>الصافي</th><th>المدفوع</th><th>المتبقي</th>
+      ${showFinancialHeaders ? '<th>الصافي</th><th>المدفوع</th><th>المتبقي</th>' : ''}
       ${eveningHeaders}
       <th>الحالة</th><th>إجراءات</th>
     </tr></thead>
@@ -652,11 +667,4 @@ function deleteStudent(id, name) {
 }
 // openStudentInstallments defined in app-students.js
 // exportStudentsExcel defined in app-students.js
-function renderFees()    {}
-function renderReports() {}
-function renderClothes() {}
-function renderSupplies(){}
-function renderMessages(){}
-function renderAutoreply(){}
-function renderHR()      {}
-function renderLicenses(){}
+funct
