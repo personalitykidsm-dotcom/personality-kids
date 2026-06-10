@@ -535,6 +535,7 @@ function openStudentInstallments(studentId) {
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-outline" onclick="addQuickInstallment('${studentId}')">➕ إضافة قسط</button>
         <button class="btn btn-outline" onclick="printInstallmentsPDF('${studentId}')">🖨️ طباعة PDF</button>
         <button class="btn btn-outline" onclick="closeModal('modal-installments')">إغلاق</button>
       </div>
@@ -542,6 +543,75 @@ function openStudentInstallments(studentId) {
   </div>`;
 
   document.getElementById('modals').innerHTML = html;
+}
+
+function addQuickInstallment(studentId) {
+  const s = DB.all('students').find(x => x.id === studentId);
+  if (!s) return;
+  const remaining = s.net - s.paid;
+
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div id="modal-quick-inst" class="modal-overlay open">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <div class="modal-title">➕ إضافة قسط — ${s.name}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-quick-inst').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>المبلغ (د.ك)</label>
+              <input type="number" id="qiAmt" step="0.001" min="0" value="${remaining > 0 ? remaining.toFixed(3) : ''}"
+                style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            </div>
+            <div class="form-group">
+              <label>تاريخ الاستحقاق</label>
+              <input type="date" id="qiDate" value="${new Date().toISOString().split('T')[0]}"
+                style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>ملاحظة</label>
+            <input type="text" id="qiNote" placeholder="اختياري"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('modal-quick-inst').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveQuickInstallment('${studentId}')">💾 حفظ القسط</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modals').appendChild(div.firstElementChild);
+}
+
+function saveQuickInstallment(studentId) {
+  const amt  = parseFloat(document.getElementById('qiAmt').value) || 0;
+  const date = document.getElementById('qiDate').value;
+  const note = document.getElementById('qiNote').value.trim();
+
+  if (!amt || amt <= 0) { showToast('⚠️ أدخل مبلغ صحيح'); return; }
+
+  const existingInsts = DB.all('installments').filter(i => i.studentId === studentId);
+  const nextNum = existingInsts.length + 1;
+
+  const inst = {
+    id:        DB.nextId('installments', 'I'),
+    studentId,
+    num:       nextNum,
+    amount:    amt,
+    dueDate:   date,
+    paidDate:  '',
+    method:    '',
+    note,
+    status:    'pending'
+  };
+
+  DB.add('installments', inst);
+  document.getElementById('modal-quick-inst').remove();
+  openStudentInstallments(studentId);
+  showToast('✅ تم إضافة القسط');
 }
 
 // ===== PAY INSTALLMENT =====
@@ -1200,8 +1270,8 @@ function saveRefund(studentId) {
   const reason = document.getElementById('refReason').value.trim();
   const prev   = document.getElementById('refAttachPreview');
 
-  if (!amount || amount <= 0) { showToast('⚠️ أدخل مبلغ صحيح'); return; }
-  if (!date) { showToast('⚠️ أدخل التاريخ'); return; }
+  if (!amount || amount <= 0) { showToast('\u26a0\ufe0f \u0623\u062f\u062e\u0644 \u0645\u0628\u0644\u063a \u0635\u062d\u064a\u062d'); return; }
+  if (!date) { showToast('\u26a0\ufe0f \u0623\u062f\u062e\u0644 \u0627\u0644\u062a\u0627\u0631\u064a\u062e'); return; }
 
   const refund = {
     id:            DB.nextId('refunds', 'R'),
@@ -1213,42 +1283,39 @@ function saveRefund(studentId) {
   };
 
   DB.add('refunds', refund);
-
   document.getElementById('modal-refund').remove();
   renderStudentsTable(activeGrade);
-  showToast('✅ تم حفظ المرتجع');
+  showToast('\u2705 \u062a\u0645 \u062d\u0641\u0638 \u0627\u0644\u0645\u0631\u062a\u062c\u0639');
 }
 
 function deleteRefund(refundId, studentId) {
-  if (!confirm('حذف هذا المرتجع؟')) return;
+  if (!confirm('\u062d\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0645\u0631\u062a\u062c\u0639\u061f')) return;
   DB.remove('refunds', refundId);
   renderStudentsTable(activeGrade);
-  showToast('🗑 تم حذف المرتجع');
+  showToast('\ud83d\uddd1 \u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0645\u0631\u062a\u062c\u0639');
 }
 
 function viewRefundAttachment(refundId) {
   const r = DB.all('refunds').find(x => x.id === refundId);
-  if (!r || !r.attachmentImg) { showToast('لا يوجد مرفق'); return; }
+  if (!r || !r.attachmentImg) { showToast('\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0631\u0641\u0642'); return; }
   const win = window.open('', '_blank', 'width=600,height=700');
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
-    <title>مرفق المرتجع</title>
+    <title>\u0645\u0631\u0641\u0642 \u0627\u0644\u0645\u0631\u062a\u062c\u0639</title>
     <style>body{margin:0;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
     h3{color:#8b5cf6}img{max-width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15)}</style></head>
-    <body><h3>📎 مرفق المرتجع</h3>
-    <img src="${r.attachmentImg}" alt="مرفق">
-    <br><button onclick="window.print()" style="margin-top:16px;padding:10px 20px;background:#8b5cf6;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ طباعة</button>
+    <body><h3>\ud83d\udcce \u0645\u0631\u0641\u0642 \u0627\u0644\u0645\u0631\u062a\u062c\u0639</h3>
+    <img src="${r.attachmentImg}" alt="\u0645\u0631\u0641\u0642">
+    <br><button onclick="window.print()" style="margin-top:16px;padding:10px 20px;background:#8b5cf6;color:#fff;border:none;border-radius:8px;cursor:pointer">\ud83d\udda8\ufe0f \u0637\u0628\u0627\u0639\u0629</button>
     </body></html>`);
   win.document.close();
 }
 
-// ===== HELPER =====
 function addMonths(dateStr, months) {
   const d = new Date(dateStr);
   d.setMonth(d.getMonth() + months);
   return d.toISOString().split('T')[0];
 }
 
-// Global exports
 window.openAddStudent          = openAddStudent;
 window.openStudentInstallments = openStudentInstallments;
 window.openEditStudent         = openEditStudent;
@@ -1257,4 +1324,3 @@ window.openRefundModal         = openRefundModal;
 window.saveRefund              = saveRefund;
 window.deleteRefund            = deleteRefund;
 window.viewRefundAttachment    = viewRefundAttachment;
-        prev.i
