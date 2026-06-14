@@ -441,6 +441,7 @@ function renderStudentsTable(grade) {
     ` : `
       <button class="btn btn-outline btn-sm" onclick="openEditStudent('${s.id}')">✏️ تعديل</button>
       <button class="btn btn-outline btn-sm" onclick="openStudentInstallments('${s.id}')">📋 الأقساط</button>
+      ${isMorningBranch(s.branch) ? `<button class="btn btn-outline btn-sm" onclick="printContract('${s.id}')">🖨️ طباعة عقد</button>` : ''}
       <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteStudent('${s.id}','${s.name}')">🗑️ حذف</button>
     `;
 
@@ -665,4 +666,13 @@ function deleteStudent(id, name) {
   showToast('🗑️ تم حذف الطالب: ' + name);
   renderStudentsTable(activeGrade);
 }
-// openStudentInsta
+// openStudentInstallments defined in app-students.js
+// exportStudentsExcel defined in app-students.js
+function renderFees()    {}
+function renderReports() {}
+function renderClothes() {}
+function renderSupplies(){}
+function renderMessages(){}
+function renderAutoreply(){}
+function renderHR()      {}
+function renderLicenses(){}

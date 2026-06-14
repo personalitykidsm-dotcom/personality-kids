@@ -167,6 +167,8 @@ function openAddStudent() {
           </div>
         </div>
 
+        ${contractFieldsHtml('s')}
+
         <div class="form-group">
           <label>ملاحظات</label>
           <textarea id="sNotes" rows="2"></textarea>
@@ -195,13 +197,221 @@ function openAddStudent() {
     branchSel.value = currentBranch;
   }
 
-  // show evening fields if evening branch selected
-  function toggleEveningFields() {
-    const isEvening = isEveningBranch(document.getElementById('sBranch').value);
-    document.getElementById('eveningSubscriptionFields').style.display = isEvening ? '' : 'none';
+  // show evening / contract fields based on selected branch
+  function toggleBranchFields() {
+    const branch = document.getElementById('sBranch').value;
+    document.getElementById('eveningSubscriptionFields').style.display = isEveningBranch(branch) ? '' : 'none';
+    const morningDiv = document.getElementById('morningContractFields');
+    if (morningDiv) {
+      if (isMorningBranch(branch)) {
+        morningDiv.style.display = '';
+        populateContractSelects(branch, 'sContractCategory', 'sContractDiscount');
+      } else {
+        morningDiv.style.display = 'none';
+        window._contractPlanRows = null;
+      }
+    }
   }
-  branchSel.addEventListener('change', toggleEveningFields);
-  toggleEveningFields();
+  branchSel.addEventListener('change', toggleBranchFields);
+  toggleBranchFields();
+}
+
+// ===== CONTRACT FIELDS (shared HTML for morning branches) =====
+function contractFieldsHtml(prefix) {
+  return `
+        <div id="${prefix==='s' ? 'morningContractFields' : 'esMorningContractFields'}" style="display:none">
+          <hr style="margin:14px 0;border-color:var(--border)">
+          <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:12px">🧾 بيانات العقد</div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>فئة العقد</label>
+              <select id="${prefix}ContractCategory" onchange="applyContractCategory('${prefix}')">
+                <option value="">— اختر الفئة —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>الخصم</label>
+              <select id="${prefix}ContractDiscount" onchange="applyContractDiscount('${prefix}')">
+                <option value="">بدون خصم</option>
+              </select>
+            </div>
+          </div>
+
+          <details style="margin-bottom:10px">
+            <summary style="cursor:pointer;font-weight:600;font-size:12px;color:var(--primary-dark)">📄 البيانات الإضافية للعقد</summary>
+            <div style="padding-top:10px">
+              <div class="form-row">
+                <div class="form-group"><label>الجنسية</label><input type="text" id="${prefix}CNationality"></div>
+                <div class="form-group"><label>الرقم المدني للطالب</label><input type="text" id="${prefix}CCivilId"></div>
+              </div>
+              <div class="form-row-3">
+                <div class="form-group"><label>اسم الأب</label><input type="text" id="${prefix}CFatherName"></div>
+                <div class="form-group"><label>وظيفة الأب</label><input type="text" id="${prefix}CFatherJob"></div>
+                <div class="form-group"><label>هاتف الأب</label><input type="tel" id="${prefix}CFatherPhone"></div>
+              </div>
+              <div class="form-row-3">
+                <div class="form-group"><label>اسم الأم</label><input type="text" id="${prefix}CMotherName"></div>
+                <div class="form-group"><label>وظيفة الأم</label><input type="text" id="${prefix}CMotherJob"></div>
+                <div class="form-group"><label>هاتف الأم</label><input type="tel" id="${prefix}CMotherPhone"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>العنوان</label><input type="text" id="${prefix}CAddress"></div>
+                <div class="form-group">
+                  <label>الحالة الاجتماعية لولي الأمر</label>
+                  <select id="${prefix}CMaritalStatus">
+                    <option value="married">متزوج</option>
+                    <option value="divorced">مطلق</option>
+                    <option value="widow">أرمل</option>
+                    <option value="single">أعزب</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:12px;font-weight:700;margin:10px 0 6px">👥 الأشخاص المصرح لهم بالاستلام</div>
+              ${[1,2,3].map(n=>`
+              <div class="form-row-3">
+                <div class="form-group"><label>الاسم ${n}</label><input type="text" id="${prefix}CAuth${n}Name"></div>
+                <div class="form-group"><label>صلة القرابة ${n}</label><input type="text" id="${prefix}CAuth${n}Relation"></div>
+                <div class="form-group"><label>الهاتف ${n}</label><input type="tel" id="${prefix}CAuth${n}Phone"></div>
+              </div>`).join('')}
+              <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="${prefix}CPhotoConsent"> أوافق على التصوير
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="${prefix}CGradConsent"> أوافق على حفل التخرج
+                </label>
+              </div>
+            </div>
+          </details>
+        </div>`;
+}
+
+// ===== COLLECT CONTRACT DATA FROM FORM =====
+function collectContractData(prefix) {
+  const val = (id) => document.getElementById(id)?.value || '';
+  const chk = (id) => !!document.getElementById(id)?.checked;
+  const catSel  = document.getElementById(prefix + 'ContractCategory');
+  const discSel = document.getElementById(prefix + 'ContractDiscount');
+  return {
+    categoryId:     catSel?.value || '',
+    discountId:     discSel?.value !== '' ? discSel?.value : '',
+    nationality:    val(prefix + 'CNationality'),
+    civilId:        val(prefix + 'CCivilId'),
+    fatherName:     val(prefix + 'CFatherName'),
+    fatherJob:      val(prefix + 'CFatherJob'),
+    fatherPhone:    val(prefix + 'CFatherPhone'),
+    motherName:     val(prefix + 'CMotherName'),
+    motherJob:      val(prefix + 'CMotherJob'),
+    motherPhone:    val(prefix + 'CMotherPhone'),
+    address:        val(prefix + 'CAddress'),
+    maritalStatus:  val(prefix + 'CMaritalStatus'),
+    auth1Name:      val(prefix + 'CAuth1Name'),
+    auth1Relation:  val(prefix + 'CAuth1Relation'),
+    auth1Phone:     val(prefix + 'CAuth1Phone'),
+    auth2Name:      val(prefix + 'CAuth2Name'),
+    auth2Relation:  val(prefix + 'CAuth2Relation'),
+    auth2Phone:     val(prefix + 'CAuth2Phone'),
+    auth3Name:      val(prefix + 'CAuth3Name'),
+    auth3Relation:  val(prefix + 'CAuth3Relation'),
+    auth3Phone:     val(prefix + 'CAuth3Phone'),
+    photoConsent:   chk(prefix + 'CPhotoConsent'),
+    gradConsent:    chk(prefix + 'CGradConsent')
+  };
+}
+
+// ===== FILL CONTRACT DATA INTO FORM (edit modal) =====
+function fillContractData(prefix, data) {
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+  setVal(prefix + 'CNationality',   data.nationality);
+  setVal(prefix + 'CCivilId',       data.civilId);
+  setVal(prefix + 'CFatherName',    data.fatherName);
+  setVal(prefix + 'CFatherJob',     data.fatherJob);
+  setVal(prefix + 'CFatherPhone',   data.fatherPhone);
+  setVal(prefix + 'CMotherName',    data.motherName);
+  setVal(prefix + 'CMotherJob',     data.motherJob);
+  setVal(prefix + 'CMotherPhone',   data.motherPhone);
+  setVal(prefix + 'CAddress',       data.address);
+  setVal(prefix + 'CMaritalStatus', data.maritalStatus);
+  setVal(prefix + 'CAuth1Name',     data.auth1Name);
+  setVal(prefix + 'CAuth1Relation', data.auth1Relation);
+  setVal(prefix + 'CAuth1Phone',    data.auth1Phone);
+  setVal(prefix + 'CAuth2Name',     data.auth2Name);
+  setVal(prefix + 'CAuth2Relation', data.auth2Relation);
+  setVal(prefix + 'CAuth2Phone',    data.auth2Phone);
+  setVal(prefix + 'CAuth3Name',     data.auth3Name);
+  setVal(prefix + 'CAuth3Relation', data.auth3Relation);
+  setVal(prefix + 'CAuth3Phone',    data.auth3Phone);
+  setChk(prefix + 'CPhotoConsent',  data.photoConsent);
+  setChk(prefix + 'CGradConsent',   data.gradConsent);
+  // category / discount selects (set after options are populated)
+  const catSel  = document.getElementById(prefix + 'ContractCategory');
+  const discSel = document.getElementById(prefix + 'ContractDiscount');
+  if (catSel && data.categoryId)  catSel.value  = data.categoryId;
+  if (discSel && data.discountId !== '' && data.discountId !== undefined && data.discountId !== null) discSel.value = data.discountId;
+}
+
+// ===== POPULATE CONTRACT SELECTS =====
+function populateContractSelects(branch, catSelId, discSelId) {
+  const settings = getContractSettings();
+  const bd = settings[branch] || { categories:{}, discounts:[] };
+  const catSel  = document.getElementById(catSelId);
+  const discSel = document.getElementById(discSelId);
+  if (catSel) {
+    catSel.innerHTML = '<option value="">— اختر الفئة —</option>' +
+      Object.entries(bd.categories).map(([id,c]) => `<option value="${id}">${c.label}</option>`).join('');
+  }
+  if (discSel) {
+    discSel.innerHTML = '<option value="">بدون خصم</option>' +
+      bd.discounts.map((d,i) => `<option value="${i}">${d.name} (${d.type==='percent' ? d.value+'%' : d.value+' د.ك'})</option>`).join('');
+  }
+}
+
+// ===== APPLY CONTRACT CATEGORY / DISCOUNT =====
+function applyContractCategory(prefix) {
+  const branchEl = document.getElementById(prefix==='s' ? 'sBranch' : 'esBranch');
+  const branch = branchEl ? branchEl.value : '';
+  const settings = getContractSettings();
+  const catSel = document.getElementById(prefix + 'ContractCategory');
+  const cat = settings[branch]?.categories?.[catSel?.value];
+  const feesEl = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
+  if (cat && feesEl) {
+    feesEl.value = (parseFloat(cat.totalFee) || 0).toFixed(3);
+  }
+  applyContractDiscount(prefix);
+}
+
+function applyContractDiscount(prefix) {
+  const branchEl = document.getElementById(prefix==='s' ? 'sBranch' : 'esBranch');
+  const branch = branchEl ? branchEl.value : '';
+  const settings = getContractSettings();
+  const bd = settings[branch] || { categories:{}, discounts:[] };
+
+  const catSel  = document.getElementById(prefix + 'ContractCategory');
+  const discSel = document.getElementById(prefix + 'ContractDiscount');
+  const feesEl  = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
+  const discEl  = document.getElementById(prefix==='s' ? 'sDiscount' : 'esDiscount');
+
+  const fees = parseFloat(feesEl?.value) || 0;
+  let discAmt = 0;
+  const d = bd.discounts[parseInt(discSel?.value)];
+  if (d) {
+    discAmt = d.type === 'percent' ? fees * (parseFloat(d.value)||0) / 100 : (parseFloat(d.value)||0);
+  }
+  if (discEl) discEl.value = discAmt.toFixed(3);
+
+  // load installment plan from the selected category, if any
+  const cat = bd.categories?.[catSel?.value];
+  if (cat && cat.installments && cat.installments.length) {
+    instMode = 'plan';
+    window._contractPlanRows = cat.installments.map(r => ({ label: r.label, amount: r.amount }));
+  } else {
+    instMode = 'equal';
+    window._contractPlanRows = null;
+  }
+
+  if (prefix === 's') calcNet(); else calcEditNet();
 }
 
 // ===== NET CALCULATION =====
@@ -224,15 +434,45 @@ function setInstMode(el, mode) {
 
 // ===== BUILD INSTALLMENT ROWS =====
 function buildInstRows() {
+  const tbody = document.getElementById('instRows');
+  if (!tbody) return;
+
+  // Plan mode: use the installment plan defined on the selected contract category
+  if (instMode === 'plan' && window._contractPlanRows && window._contractPlanRows.length) {
+    const startVal = document.getElementById('instStart').value;
+    const months    = parseInt(document.getElementById('instInterval').value) || 1;
+    let rows = '';
+    window._contractPlanRows.forEach((r, i) => {
+      const date = startVal ? addMonths(startVal, months * i) : '';
+      rows += `<tr>
+        <td style="padding:6px 10px;color:var(--text-muted)">${i + 1}</td>
+        <td style="padding:4px 6px">
+          <input type="number" class="inst-input inst-amt" value="${r.amount || 0}" step="0.001" min="0"
+            style="width:110px" oninput="updateInstTotal()">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="date" class="inst-input inst-date" value="${date}">
+        </td>
+        <td style="padding:4px 6px">
+          <input type="text" class="inst-input inst-note" value="${r.label || ''}" style="width:120px">
+        </td>
+        <td style="padding:4px 6px;text-align:center">
+          <button onclick="this.closest('tr').remove();updateInstTotal()"
+            style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px">🗑</button>
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows;
+    updateInstTotal();
+    return;
+  }
+
   const n        = parseInt(document.getElementById('instCount').value) || 1;
   const startVal = document.getElementById('instStart').value;
   const months   = parseInt(document.getElementById('instInterval').value) || 1;
   const net      = parseFloat(document.getElementById('sNet').value) || 0;
   const base     = net > 0 ? parseFloat((net / n).toFixed(3)) : 0;
   const last     = net > 0 ? parseFloat((net - base * (n - 1)).toFixed(3)) : 0;
-
-  const tbody = document.getElementById('instRows');
-  if (!tbody) return;
 
   let rows = '';
   for (let i = 1; i <= n; i++) {
@@ -330,6 +570,11 @@ function saveStudent() {
   };
 
   DB.add('students', student);
+
+  // save contract data (morning branches only)
+  if (isMorningBranch(branch)) {
+    saveStudentContract(id, collectContractData('s'));
+  }
 
   // save installments
   const rows = document.querySelectorAll('#instRows tr');
@@ -433,6 +678,219 @@ function printStudentForm() {
       <div><div class="sig-line"></div><div>توقيع الإدارة</div></div>
       <div><div class="sig-line"></div><div>الختم الرسمي</div></div>
     </div>
+    <br><button class="no-print" onclick="window.print()">🖨️ طباعة</button>
+    </body></html>`);
+  win.document.close();
+}
+
+// ===== PRINT CONTRACT (morning branches only) =====
+// نص بند الشروط والأحكام الكامل (11 بنداً) + الإقرار والتوقيعات — مطابق لنماذج العقود
+function getContractTermsHtml(contractData) {
+  const photo = !!contractData.photoConsent;
+  const grad  = !!contractData.gradConsent;
+
+  return `
+    <div class="terms-block">
+      <p><b>أولاً: حجز المقعد</b></p>
+      <p>يعتبر دفع رسوم التسجيل أو حجز المقعد موافقة على شروط وأحكام الحضانة، ولا تسترد رسوم الحجز بعد تأكيد التسجيل.</p>
+
+      <p><b>ثانياً: الرسوم الدراسية</b></p>
+      <ol>
+        <li>يلتزم ولي الأمر بسداد الرسوم الدراسية حسب الخطة المالية المعتمدة.</li>
+        <li>العرض السنوي يشمل سداد الرسوم من شهر سبتمبر إلى مارس.</li>
+        <li>يمنح شهرا أبريل ومايو مجاناً للملتزمين بالسداد طوال العام.</li>
+        <li>عند التأخير أو عدم الالتزام بالسداد يلغى العرض، ويلتزم ولي الأمر بسداد رسوم شهري أبريل ومايو كاملة.</li>
+      </ol>
+
+      <p><b>ثالثاً: الحضور والانصراف</b></p>
+      <ol>
+        <li>يلتزم ولي الأمر بمواعيد الحضور والانصراف.</li>
+        <li>لا يتم تسليم الطفل إلا لولي الأمر أو للمخولين المذكورين في العقد.</li>
+        <li>في حال تغيير الأشخاص المخولين يجب إشعار الإدارة كتابياً.</li>
+      </ol>
+
+      <p><b>رابعاً: المسؤولية</b></p>
+      <ol>
+        <li>تبدأ مسؤولية الحضانة من لحظة استلام الطفل من ولي الأمر.</li>
+        <li>تنتهي مسؤولية الحضانة عند تسليم الطفل لولي الأمر أو للمخول استلامه.</li>
+        <li>يتحمل ولي الأمر مسؤولية الطفل أثناء الدخول والخروج وحتى اكتمال إجراءات التسليم والاستلام.</li>
+      </ol>
+
+      <p><b>خامساً: الحالة الصحية</b></p>
+      <p>يلتزم ولي الأمر بالإفصاح عن أي حالة صحية أو حساسية أو احتياجات خاصة تخص الطفل، وتزويد الحضانة بالتقارير الطبية الخاصة بالطفل مع التوصيات اللازمة.</p>
+
+      <p><b>سادساً: الغياب والحضور</b></p>
+      <p>لا يترتب على غياب الطفل أو انقطاعه لأي سبب استرداد أو خصم أي رسوم مستحقة.</p>
+
+      <p><b>سابعاً: الانسحاب من الحضانة</b></p>
+      <ol>
+        <li>يجب إشعار الإدارة خطياً أو عن طريق إرسال رسالة نصية بانسحاب الطفل من الحضانة.</li>
+        <li>لا تسترد الرسوم المدفوعة عن الفترات الدراسية التي بدأت بالفعل.</li>
+        <li>تبقى جميع المستحقات المالية واجبة السداد حتى تاريخ الانسحاب.</li>
+      </ol>
+
+      <p><b>ثامناً: التصوير والنشر الإعلامي</b></p>
+      <p>${photo ? '(✓)' : '(  )'}&nbsp; أوافق على تصوير طفلي واستخدام الصور والمقاطع المرئية في حسابات الحضانة الرسمية.</p>
+      <p>${!photo ? '(✓)' : '(  )'}&nbsp; لا أوافق على تصوير طفلي أو نشر صوره أو مقاطعه المرئية.</p>
+
+      <p><b>تاسعاً: المشاركة في حفل التخرج</b></p>
+      <p>${grad ? '(✓)' : '(  )'}&nbsp; أوافق على مشاركة طفلي في حفل التخرج والفعاليات الخاصة بالحضانة.</p>
+      <p>${!grad ? '(✓)' : '(  )'}&nbsp; لا أوافق على مشاركة طفلي في حفل التخرج والفعاليات الخاصة بالحضانة.</p>
+
+      <p><b>عاشراً: الظروف الطارئة والقوة القاهرة</b></p>
+      <p>في حال تعليق الدراسة أو إغلاق الحضانة بسبب قرارات حكومية أو ظروف صحية أو أمنية أو كوارث طبيعية أو أي ظروف خارجة عن إرادة الحضانة، يحق للإدارة اتخاذ الإجراءات المناسبة بما يحقق استمرارية العملية التعليمية والإدارية.</p>
+
+      <p><b>الحادي عشر: الالتزام باللوائح</b></p>
+      <p>يقر ولي الأمر بأنه اطلع على جميع الأنظمة واللوائح والسياسات الخاصة بالحضانة ويلتزم بها.</p>
+      <p>جميع الخصومات والعروض المقدمة من الحضانة مشروطة باستمرار الطفل حتى نهاية الفترة المتفق عليها والالتزام الكامل بسداد الرسوم، وفي حال الانسحاب أو إيقاف التسجيل قبل انتهاء الفترة المتفق عليها يحق للحضانة إلغاء الخصم واسترداد قيمة الخصومات الممنوحة وإعادة احتساب الرسوم بالسعر الأساسي.</p>
+    </div>
+
+    <div class="ack">
+      <p><b>الإقرار:</b></p>
+      <p>أقر أنا ولي الأمر بأن جميع البيانات المذكورة صحيحة، وأنني قرأت العقد كاملاً ووافقت على جميع بنوده.</p>
+    </div>
+
+    <div class="sig2">
+      <div>
+        <div>اسم ولي الأمر: ______________________</div>
+        <div style="margin-top:14px">التوقيع: ______________________</div>
+        <div style="margin-top:14px">التاريخ: ___ / ___ / ______</div>
+      </div>
+      <div>
+        <div><b>اعتماد الحضانة</b></div>
+        <div style="margin-top:14px">اسم الموظف: ______________________</div>
+        <div style="margin-top:14px">التوقيع: ______________________</div>
+      </div>
+    </div>`;
+}
+
+function printContract(studentId) {
+  const s = DB.all('students').find(st => st.id === studentId);
+  if (!s) { showToast('⚠️ الطالب غير موجود'); return; }
+  if (!isMorningBranch(s.branch)) { showToast('⚠️ طباعة العقد متاحة للأفرع الصباحية فقط'); return; }
+
+  const contractData = getStudentContract(studentId);
+  const settings = getContractSettings();
+  const bd = settings[s.branch] || { categories:{}, discounts:[], terms:'' };
+  const cat      = bd.categories?.[contractData.categoryId];
+  const discount = bd.discounts?.[parseInt(contractData.discountId)];
+  const nursery  = DB.get('nurserySettings') || {};
+  const branchName = BRANCHES[s.branch]?.name || s.branch;
+  const gradeLabel  = getGrades().find(g => g.id === s.grade)?.label || s.grade || '—';
+
+  const installments = DB.all('installments').filter(i => i.studentId === studentId);
+  const instRows = installments.map((inst, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${inst.note || cat?.installments?.[i]?.label || ('قسط ' + (i + 1))}</td>
+      <td>${parseFloat(inst.amount || 0).toFixed(3)} د.ك</td>
+      <td>${(inst.dueDate || '').replace(/-/g,'/') || '—'}</td>
+    </tr>`).join('');
+
+  const totalFee = cat?.totalFee != null ? cat.totalFee : (s.fees || 0);
+  const offerFee = cat?.offerFee != null ? cat.offerFee : (s.net || 0);
+  const seatFee  = cat?.seatFee  != null ? cat.seatFee  : 0;
+
+  let discountLine = '—';
+  if (discount) {
+    discountLine = discount.type === 'percent'
+      ? `${discount.name} (${discount.value}%)`
+      : `${discount.name} (${parseFloat(discount.value || 0).toFixed(3)} د.ك)`;
+  } else if (s.discount) {
+    discountLine = `${parseFloat(s.discount).toFixed(3)} د.ك`;
+  }
+
+  const maritalLabels = { married:'متزوجان', divorced:'مطلقان', widow:'أرمل / أرملة', single:'أخرى' };
+  const yearLabel = nursery.year || '2026/2027';
+  const nurseryName = nursery.name || 'Personality Kids';
+
+  // عمر الطفل من تاريخ الميلاد
+  let ageLabel = '—';
+  if (s.dob) {
+    const b = new Date(s.dob);
+    const now = new Date();
+    if (!isNaN(b.getTime())) {
+      let years = now.getFullYear() - b.getFullYear();
+      let months = now.getMonth() - b.getMonth();
+      if (now.getDate() < b.getDate()) months--;
+      if (months < 0) { years--; months += 12; }
+      ageLabel = `${years} سنة${months ? ' و ' + months + ' شهر' : ''}`;
+    }
+  }
+
+  // عنوان العقد حسب الفئة/المرحلة
+  const titleSrc = `${cat?.label || ''} ${gradeLabel || ''} ${s.grade || ''}`.toUpperCase();
+  let contractTitle = cat?.label || gradeLabel || '—';
+  if (titleSrc.includes('KG')) contractTitle = 'KG 1 / KG 2';
+  else if (titleSrc.includes('LEVEL') || /\bL[12]\b/.test(titleSrc)) contractTitle = 'Level 1 / Level 2';
+
+  const termsSectionHtml = getContractTermsHtml(contractData);
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">
+    <title>عقد تسجيل — ${s.name}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:30px;direction:rtl;font-size:13px;color:#222}
+      h2{color:#1a9e6a;text-align:center;border-bottom:2px solid #1a9e6a;padding-bottom:8px;margin-bottom:6px}
+      h3{color:#1a9e6a;margin:18px 0 8px}
+      .sub{text-align:center;color:#555;margin-bottom:18px;font-size:13px}
+      table{width:100%;border-collapse:collapse;margin-bottom:14px}
+      td,th{border:1px solid #ccc;padding:8px 10px;text-align:right}
+      th{background:#f0f0f0;width:30%;font-weight:600}
+      .fee-table th{background:#e8f5ee}
+      ol.terms{padding-right:20px;line-height:1.9}
+      ol.terms li{margin-bottom:6px}
+      .tagline{text-align:center;color:#1a9e6a;font-weight:700;margin-bottom:14px}
+      .terms-block p{margin:8px 0;line-height:1.8}
+      .terms-block ol{padding-right:24px;line-height:1.9;margin:6px 0}
+      .terms-block ol li{margin-bottom:4px}
+      .ack{margin-top:18px;background:#f7f7f5;border-radius:8px;padding:10px 14px}
+      .sig2{display:flex;justify-content:space-between;gap:30px;margin-top:30px;line-height:2.4}
+      .sig2 > div{flex:1}
+      @media print{.no-print{display:none}}
+    </style></head><body>
+
+    <h2>🌟 ${nurseryName} — عقد تسجيل طفل "${contractTitle}"</h2>
+    <div class="sub">الفرع: ${branchName} &nbsp;|&nbsp; المرحلة: ${gradeLabel} &nbsp;|&nbsp; العام الدراسي: ${yearLabel}</div>
+    <div class="tagline">هدفنا: طفل قوي ومتعلم</div>
+
+    <h3>أولاً: بند البيانات</h3>
+    <table>
+      <tr><th>اسم الطالب</th><td><b>${s.name}</b></td><th>الكود</th><td>${s.id}</td></tr>
+      <tr><th>تاريخ الميلاد</th><td>${(s.dob||'').replace(/-/g,'/')||'—'}</td><th>العمر</th><td>${ageLabel}</td></tr>
+      <tr><th>الجنسية</th><td>${contractData.nationality||'—'}</td><th>الرقم المدني</th><td>${contractData.civilId||'—'}</td></tr>
+      <tr><th>اسم الأب</th><td>${contractData.fatherName||'—'}</td><th>هاتف الأب</th><td>${contractData.fatherPhone || s.phone1 || '—'}</td></tr>
+      <tr><th>العمل والجهة (الأب)</th><td>${contractData.fatherJob||'—'}</td><th>اسم الأم</th><td>${contractData.motherName||'—'}</td></tr>
+      <tr><th>هاتف الأم</th><td>${contractData.motherPhone || s.phone2 || '—'}</td><th>العمل والجهة (الأم)</th><td>${contractData.motherJob||'—'}</td></tr>
+      <tr><th>عنوان السكن</th><td colspan="3">${contractData.address||'—'}</td></tr>
+      <tr><th>حالة الأم والأب</th><td colspan="3">${maritalLabels[contractData.maritalStatus]||'—'}</td></tr>
+    </table>
+
+    <h4 style="margin:10px 0 6px">الأشخاص المخول لهم استلام الطفل</h4>
+    <table>
+      <thead><tr><th style="width:33%">الاسم</th><th style="width:34%">صلة القرابة</th><th>الهاتف</th></tr></thead>
+      <tbody>
+        <tr><td>${contractData.auth1Name||'—'}</td><td>${contractData.auth1Relation||'—'}</td><td>${contractData.auth1Phone||'—'}</td></tr>
+        <tr><td>${contractData.auth2Name||'—'}</td><td>${contractData.auth2Relation||'—'}</td><td>${contractData.auth2Phone||'—'}</td></tr>
+        <tr><td>${contractData.auth3Name||'—'}</td><td>${contractData.auth3Relation||'—'}</td><td>${contractData.auth3Phone||'—'}</td></tr>
+      </tbody>
+    </table>
+
+    <h3>ثانياً: بند الرسوم والأقساط المجدولة</h3>
+    <table class="fee-table">
+      <tr><th>الرسوم المستحقة</th><td>${parseFloat(totalFee).toFixed(3)} د.ك</td><th>العرض السنوي</th><td><b>${parseFloat(offerFee).toFixed(3)} د.ك</b></td></tr>
+      <tr><th>حجز المقعد</th><td>${parseFloat(seatFee).toFixed(3)} د.ك</td><th>الخصم</th><td>${discountLine}</td></tr>
+      <tr><th>الصافي المستحق</th><td colspan="3"><b style="font-size:15px">${parseFloat(s.net || offerFee).toFixed(3)} د.ك</b></td></tr>
+    </table>
+    <p style="margin:-4px 0 8px">خلال الفترة من سبتمبر (9) إلى مارس (3)، ضمن خطة دفع معتمدة:</p>
+    <table class="fee-table">
+      <thead><tr><th>#</th><th>البند</th><th>المبلغ</th><th>تاريخ الاستحقاق</th></tr></thead>
+      <tbody>${instRows || '<tr><td colspan="4" style="text-align:center;color:#999">لا توجد أقساط</td></tr>'}</tbody>
+    </table>
+
+    <h3>ثالثاً: بند الشروط والأحكام</h3>
+    ${termsSectionHtml}
+
     <br><button class="no-print" onclick="window.print()">🖨️ طباعة</button>
     </body></html>`);
   win.document.close();
@@ -1017,6 +1475,8 @@ function openEditStudent(id) {
           <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addInstRow()">➕ إضافة قسط</button>
         </div>
 
+        ${contractFieldsHtml('es')}
+
         <div class="form-group">
           <label>ملاحظات</label>
           <textarea id="esNotes" rows="2">${s.notes||''}</textarea>
@@ -1032,10 +1492,27 @@ function openEditStudent(id) {
   document.getElementById('modals').innerHTML = html;
   updateInstTotal();
 
-  // toggle evening fields when branch changes
-  document.getElementById('esBranch').addEventListener('change', function() {
-    document.getElementById('esEveningFields').style.display = isEveningBranch(this.value) ? 'block' : 'none';
-  });
+  // toggle evening / contract fields when branch changes
+  function toggleEditBranchFields() {
+    const branch = document.getElementById('esBranch').value;
+    document.getElementById('esEveningFields').style.display = isEveningBranch(branch) ? 'block' : 'none';
+    const morningDiv = document.getElementById('esMorningContractFields');
+    if (morningDiv) {
+      if (isMorningBranch(branch)) {
+        morningDiv.style.display = '';
+        populateContractSelects(branch, 'esContractCategory', 'esContractDiscount');
+      } else {
+        morningDiv.style.display = 'none';
+      }
+    }
+  }
+  document.getElementById('esBranch').addEventListener('change', toggleEditBranchFields);
+  toggleEditBranchFields();
+
+  // pre-fill existing contract data (morning branches)
+  if (isMorningBranch(s.branch)) {
+    fillContractData('es', getStudentContract(id));
+  }
 }
 
 function calcEditNet() {
@@ -1097,6 +1574,11 @@ function saveEditStudent(id) {
     subscriptionType: updated.subscriptionType,
     subscriptionEnd:  updated.subscriptionEnd,
   });
+
+  // save contract data (morning branches only)
+  if (isMorningBranch(esBranch)) {
+    saveStudentContract(id, collectContractData('es'));
+  }
 
   // Update installments: delete removed ones, update/insert the rest
   const allInst = DB.all('installments');
@@ -1476,6 +1958,9 @@ function confirmImportStudents(students) {
   renderStudentsTable(activeGrade);
 }
 
+window.printContract            = printContract;
+window.applyContractCategory    = applyContractCategory;
+window.applyContractDiscount    = applyContractDiscount;
 window.openAddStudent          = openAddStudent;
 window.openStudentInstallments = openStudentInstallments;
 window.openEditStudent         = openEditStudent;

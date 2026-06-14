@@ -283,6 +283,43 @@ function fmtDate(d){ if(!d) return '—'; return d.replace(/-/g,'/'); }
 function fmtKD(n){ return parseFloat(n||0).toFixed(3)+' د.ك'; }
 const EVENING_BRANCHES = ['esh_e','sol_e','mat_e'];
 function isEveningBranch(branch){ return EVENING_BRANCHES.includes(branch); }
+const MORNING_BRANCHES = ['esh','sol','mat'];
+function isMorningBranch(branch){ return MORNING_BRANCHES.includes(branch); }
+
+// ============================================================
+// CONTRACT SETTINGS (per morning branch: categories, discounts, terms)
+// ============================================================
+function getContractSettings(){
+  const def = {};
+  MORNING_BRANCHES.forEach(b=>{ def[b] = { categories:{}, discounts:[], terms:'' }; });
+  const saved = DB.get('contractSettings') || {};
+  // merge to make sure all morning branches exist with proper shape
+  MORNING_BRANCHES.forEach(b=>{
+    const sb = saved[b] || {};
+    def[b] = {
+      categories: sb.categories || {},
+      discounts:  sb.discounts  || [],
+      terms:      sb.terms      || ''
+    };
+  });
+  return def;
+}
+function saveContractSettings(settings){
+  DB.set('contractSettings', settings);
+}
+
+// ============================================================
+// STUDENT CONTRACT EXTRA DATA (per student — legal/contract fields)
+// ============================================================
+function getStudentContract(studentId){
+  const all = DB.get('studentContracts') || {};
+  return all[studentId] || {};
+}
+function saveStudentContract(studentId, data){
+  const all = DB.get('studentContracts') || {};
+  all[studentId] = { ...(all[studentId]||{}), ...data };
+  DB.set('studentContracts', all);
+}
 
 function studentStatus(s){
   // Evening branch: show enrollment status

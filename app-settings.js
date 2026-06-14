@@ -31,6 +31,7 @@ function renderSettings() {
       <button class="tab-btn" onclick="settTab('perms',this)">🔑 الصلاحيات</button>
       <button class="tab-btn" onclick="settTab('nursery',this)">🏫 إعدادات الروضة</button>
       <button class="tab-btn" onclick="settTab('grades',this)">🎓 المراحل الدراسية</button>
+      <button class="tab-btn" onclick="settTab('contracts',this)">🧾 العقود</button>
       <button class="tab-btn" onclick="settTab('data',this)">💾 البيانات</button>
     </div>
     <div id="settContent"></div>
@@ -126,6 +127,7 @@ function settTab(tab, el) {
   if (tab === 'perms')   renderPermsTab(cont);
   if (tab === 'nursery') renderNurseryTab(cont);
   if (tab === 'grades')  renderGradesTab(cont);
+  if (tab === 'contracts') renderContractsTab(cont);
   if (tab === 'data')    renderDataTab(cont);
 }
 
@@ -365,6 +367,227 @@ function deleteGrade(idx) {
   showToast('🗑️ تم حذف المرحلة');
   const cont = document.getElementById('settContent');
   if (cont) renderGradesTab(cont);
+}
+
+// ── CONTRACTS TAB (morning branches only) ───────────────────
+function renderContractsTab(cont) {
+  if (!window._contractsBranch || !MORNING_BRANCHES.includes(window._contractsBranch)) {
+    window._contractsBranch = MORNING_BRANCHES[0];
+  }
+  const branch = window._contractsBranch;
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-title">🧾 إعدادات العقود (الأفرع الصباحية)</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+        حدد لكل فرع صباحي فئات العقود (الرسوم وخطة التقسيط)، الخصومات المتاحة، والشروط والأحكام — ستظهر هذه القوائم عند إضافة/تعديل الطالب وطباعة العقد.
+      </p>
+      <div class="tabs" style="margin-bottom:16px">
+        ${MORNING_BRANCHES.map(b=>`<button class="tab-btn ${b===branch?'active':''}" onclick="contractsSwitchBranch('${b}')">${BRANCHES[b].name}</button>`).join('')}
+      </div>
+      <div id="contractsBranchContent"></div>
+    </div>`;
+  renderContractsBranchContent(branch);
+}
+
+function contractsSwitchBranch(branch) {
+  window._contractsBranch = branch;
+  const cont = document.getElementById('settContent');
+  if (cont) renderContractsTab(cont);
+}
+
+function renderContractsBranchContent(branch) {
+  const settings = getContractSettings();
+  const branchData = settings[branch];
+  const grades = getGrades();
+  const categories = Object.entries(branchData.categories || {});
+
+  const categoriesHtml = categories.map(([catId, cat]) => {
+    const gradeChecks = grades.map(g => `
+      <label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:12px;cursor:pointer">
+        <input type="checkbox" ${(cat.grades||[]).includes(g.id) ? 'checked' : ''}
+          onchange="toggleContractCategoryGrade('${branch}','${catId}','${g.id}',this.checked)">
+        ${g.label}
+      </label>`).join('');
+
+    const instRows = (cat.installments || []).map((row, idx) => `
+      <tr>
+        <td style="padding:4px"><input class="form-control" style="font-size:12px" value="${row.label||''}" onchange="updateContractInstRow('${branch}','${catId}',${idx},'label',this.value)"></td>
+        <td style="padding:4px"><input type="number" step="0.001" class="form-control" style="font-size:12px;width:110px" value="${row.amount||0}" onchange="updateContractInstRow('${branch}','${catId}',${idx},'amount',this.value)"></td>
+        <td style="padding:4px;text-align:center">
+          <button onclick="deleteContractInstRow('${branch}','${catId}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer">🗑</button>
+        </td>
+      </tr>`).join('');
+
+    const instTotal = (cat.installments || []).reduce((s,r)=> s + (parseFloat(r.amount)||0), 0);
+    const offerFee = parseFloat(cat.offerFee) || 0;
+    const diff = parseFloat((instTotal - offerFee).toFixed(3));
+
+    return `
+    <div class="card" style="background:var(--bg-secondary,#f7f7f5);margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+        <input class="form-control" style="font-weight:700;max-width:260px" value="${cat.label||''}" onchange="updateContractCategory('${branch}','${catId}','label',this.value)" placeholder="اسم الفئة (مثال: KG1)">
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteContractCategory('${branch}','${catId}')">🗑️ حذف الفئة</button>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;font-weight:600;color:var(--text-muted)">المراحل المرتبطة بهذه الفئة</label><br>
+        ${gradeChecks || '<span style="color:var(--text-muted)">لا توجد مراحل معرّفة</span>'}
+      </div>
+      <div class="form-row-3">
+        <div class="form-group">
+          <label>الرسوم الإجمالية (د.ك)</label>
+          <input type="number" step="0.001" class="form-control" value="${cat.totalFee||0}" onchange="updateContractCategory('${branch}','${catId}','totalFee',this.value)">
+        </div>
+        <div class="form-group">
+          <label>العرض السنوي (د.ك)</label>
+          <input type="number" step="0.001" class="form-control" value="${cat.offerFee||0}" onchange="updateContractCategory('${branch}','${catId}','offerFee',this.value)">
+        </div>
+        <div class="form-group">
+          <label>حجز المقعد (د.ك)</label>
+          <input type="number" step="0.001" class="form-control" value="${cat.seatFee||0}" onchange="updateContractCategory('${branch}','${catId}','seatFee',this.value)">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 خطة التقسيط (مبنية على العرض السنوي)</div>
+        <table style="width:100%">
+          <thead><tr><th style="font-size:11px">البند</th><th style="font-size:11px">المبلغ (د.ك)</th><th></th></tr></thead>
+          <tbody>${instRows}</tbody>
+        </table>
+        <button class="btn btn-outline btn-sm" style="margin-top:6px" onclick="addContractInstRow('${branch}','${catId}')">➕ إضافة بند</button>
+        <div style="margin-top:6px;font-size:12px">
+          إجمالي الخطة: <b>${instTotal.toFixed(3)} د.ك</b>
+          ${Math.abs(diff) < 0.001
+            ? '<span style="color:var(--primary)"> ✅ يطابق العرض السنوي</span>'
+            : `<span style="color:var(--danger)"> ⚠️ فرق عن العرض السنوي: ${diff>0?'+':''}${diff} د.ك</span>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<p style="color:var(--text-muted)">لا توجد فئات بعد — أضف فئة جديدة بالأسفل</p>';
+
+  const discounts = branchData.discounts || [];
+  const discountRows = discounts.map((d, idx) => `
+    <tr>
+      <td style="padding:4px"><input class="form-control" style="font-size:12px" value="${d.name||''}" onchange="updateContractDiscount('${branch}',${idx},'name',this.value)"></td>
+      <td style="padding:4px">
+        <select class="form-control" style="font-size:12px" onchange="updateContractDiscount('${branch}',${idx},'type',this.value)">
+          <option value="fixed" ${d.type==='fixed'?'selected':''}>مبلغ ثابت (د.ك)</option>
+          <option value="percent" ${d.type==='percent'?'selected':''}>نسبة %</option>
+        </select>
+      </td>
+      <td style="padding:4px"><input type="number" step="0.001" class="form-control" style="font-size:12px;width:100px" value="${d.value||0}" onchange="updateContractDiscount('${branch}',${idx},'value',this.value)"></td>
+      <td style="padding:4px;text-align:center"><button onclick="deleteContractDiscount('${branch}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer">🗑</button></td>
+    </tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:10px">لا توجد خصومات</td></tr>`;
+
+  const c = document.getElementById('contractsBranchContent');
+  if (!c) return;
+  c.innerHTML = `
+    <div style="margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark)">📋 فئات العقود (الرسوم وخطة التقسيط)</div>
+        <button class="btn btn-primary btn-sm" onclick="addContractCategory('${branch}')">➕ إضافة فئة</button>
+      </div>
+      ${categoriesHtml}
+    </div>
+
+    <div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:10px">🏷️ الخصومات</div>
+      <div class="table-wrap">
+        <table style="width:100%">
+          <thead><tr><th>اسم الخصم</th><th>النوع</th><th>القيمة</th><th></th></tr></thead>
+          <tbody>${discountRows}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addContractDiscount('${branch}')">➕ إضافة خصم</button>
+    </div>`;
+}
+
+function addContractCategory(branch) {
+  const settings = getContractSettings();
+  const catId = 'cat' + Date.now();
+  settings[branch].categories[catId] = { id:catId, label:'فئة جديدة', grades:[], totalFee:0, offerFee:0, seatFee:0, installments:[] };
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function updateContractCategory(branch, catId, field, value) {
+  const settings = getContractSettings();
+  const cat = settings[branch].categories[catId];
+  if (!cat) return;
+  cat[field] = (field === 'label') ? value : (parseFloat(value) || 0);
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function toggleContractCategoryGrade(branch, catId, gradeId, checked) {
+  const settings = getContractSettings();
+  const cat = settings[branch].categories[catId];
+  if (!cat) return;
+  cat.grades = cat.grades || [];
+  if (checked) {
+    if (!cat.grades.includes(gradeId)) cat.grades.push(gradeId);
+  } else {
+    cat.grades = cat.grades.filter(g => g !== gradeId);
+  }
+  saveContractSettings(settings);
+}
+
+function deleteContractCategory(branch, catId) {
+  if (!confirm('هل تريد حذف هذه الفئة؟')) return;
+  const settings = getContractSettings();
+  delete settings[branch].categories[catId];
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function addContractInstRow(branch, catId) {
+  const settings = getContractSettings();
+  const cat = settings[branch].categories[catId];
+  if (!cat) return;
+  cat.installments = cat.installments || [];
+  cat.installments.push({ label: 'قسط ' + (cat.installments.length + 1), amount: 0 });
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function updateContractInstRow(branch, catId, idx, field, value) {
+  const settings = getContractSettings();
+  const cat = settings[branch].categories[catId];
+  if (!cat || !cat.installments[idx]) return;
+  cat.installments[idx][field] = field === 'amount' ? (parseFloat(value) || 0) : value;
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function deleteContractInstRow(branch, catId, idx) {
+  const settings = getContractSettings();
+  const cat = settings[branch].categories[catId];
+  if (!cat) return;
+  cat.installments.splice(idx, 1);
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function addContractDiscount(branch) {
+  const settings = getContractSettings();
+  settings[branch].discounts.push({ name:'خصم جديد', type:'fixed', value:0 });
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
+}
+
+function updateContractDiscount(branch, idx, field, value) {
+  const settings = getContractSettings();
+  const d = settings[branch].discounts[idx];
+  if (!d) return;
+  d[field] = field === 'value' ? (parseFloat(value) || 0) : value;
+  saveContractSettings(settings);
+  if (field === 'type') renderContractsBranchContent(branch);
+}
+
+function deleteContractDiscount(branch, idx) {
+  if (!confirm('هل تريد حذف هذا الخصم؟')) return;
+  const settings = getContractSettings();
+  settings[branch].discounts.splice(idx, 1);
+  saveContractSettings(settings);
+  renderContractsBranchContent(branch);
 }
 
 function renderDataTab(cont) {
