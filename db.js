@@ -143,6 +143,21 @@ const DB = {
       .catch(e=> console.warn('add err:',e));
   },
 
+  // Insert multiple rows in a single request (avoids the post+refetch race
+  // that can drop rows when add() is called repeatedly in a tight loop)
+  addBulk(key, items) {
+    if (!items || !items.length) return;
+    const rows = items.map(toSnake);
+    CACHE[key] = CACHE[key]||[];
+    rows.forEach(r => CACHE[key].push(r));
+    SB.post(TABLES[key]||key, rows)
+      .then(()=> SB.get(TABLES[key]||key,'order=id')
+        .then(r=>{ CACHE[key]=r||[]; })
+        .catch(()=>{})
+      )
+      .catch(e=> console.warn('addBulk err:',e));
+  },
+
   update(key, id, changes) {
     const row = toSnake(changes);
     CACHE[key] = (CACHE[key]||[]).map(i=> i.id===id ? {...i,...row} : i);

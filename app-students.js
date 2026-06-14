@@ -223,7 +223,7 @@ function contractFieldsHtml(prefix) {
           <hr style="margin:14px 0;border-color:var(--border)">
           <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:12px">🧾 بيانات العقد</div>
 
-          <div class="form-row">
+          <div class="form-row-3">
             <div class="form-group">
               <label>فئة العقد</label>
               <select id="${prefix}ContractCategory" onchange="applyContractCategory('${prefix}')">
@@ -236,11 +236,15 @@ function contractFieldsHtml(prefix) {
                 <option value="">بدون خصم</option>
               </select>
             </div>
+            <div class="form-group">
+              <label>الرسوم المستحقة (د.ك)</label>
+              <input type="number" step="0.001" id="${prefix}FeesDue">
+            </div>
           </div>
 
-          <details style="margin-bottom:10px">
-            <summary style="cursor:pointer;font-weight:600;font-size:12px;color:var(--primary-dark)">📄 البيانات الإضافية للعقد</summary>
-            <div style="padding-top:10px">
+          <div style="margin-bottom:10px">
+            <div style="font-weight:600;font-size:12px;color:var(--primary-dark);margin-bottom:8px">📄 البيانات الإضافية للعقد</div>
+            <div>
               <div class="form-row">
                 <div class="form-group"><label>الجنسية</label><input type="text" id="${prefix}CNationality"></div>
                 <div class="form-group"><label>الرقم المدني للطالب</label><input type="text" id="${prefix}CCivilId"></div>
@@ -283,7 +287,7 @@ function contractFieldsHtml(prefix) {
                 </label>
               </div>
             </div>
-          </details>
+          </div>
         </div>`;
 }
 
@@ -296,6 +300,7 @@ function collectContractData(prefix) {
   return {
     categoryId:     catSel?.value || '',
     discountId:     discSel?.value !== '' ? discSel?.value : '',
+    feesDue:        parseFloat(val(prefix + 'FeesDue')) || 0,
     nationality:    val(prefix + 'CNationality'),
     civilId:        val(prefix + 'CCivilId'),
     fatherName:     val(prefix + 'CFatherName'),
@@ -345,11 +350,17 @@ function fillContractData(prefix, data) {
   setVal(prefix + 'CAuth3Phone',    data.auth3Phone);
   setChk(prefix + 'CPhotoConsent',  data.photoConsent);
   setChk(prefix + 'CGradConsent',   data.gradConsent);
+  setVal(prefix + 'FeesDue',        data.feesDue);
   // category / discount selects (set after options are populated)
   const catSel  = document.getElementById(prefix + 'ContractCategory');
   const discSel = document.getElementById(prefix + 'ContractDiscount');
   if (catSel && data.categoryId)  catSel.value  = data.categoryId;
   if (discSel && data.discountId !== '' && data.discountId !== undefined && data.discountId !== null) discSel.value = data.discountId;
+  // lock fees field if a category is already applied (non-admin)
+  if (data.categoryId && currentUser?.role !== 'admin') {
+    const feesEl = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
+    if (feesEl) feesEl.readOnly = true;
+  }
 }
 
 // ===== POPULATE CONTRACT SELECTS =====
@@ -375,9 +386,17 @@ function applyContractCategory(prefix) {
   const settings = getContractSettings();
   const catSel = document.getElementById(prefix + 'ContractCategory');
   const cat = settings[branch]?.categories?.[catSel?.value];
-  const feesEl = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
+  const feesEl    = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
+  const feesDueEl = document.getElementById(prefix + 'FeesDue');
+  const isAdmin = currentUser?.role === 'admin';
   if (cat && feesEl) {
-    feesEl.value = (parseFloat(cat.totalFee) || 0).toFixed(3);
+    // الرسوم = العرض السنوي (offerFee), الرسوم المستحقة = totalFee (display-only)
+    feesEl.value = (parseFloat(cat.offerFee) || 0).toFixed(3);
+    if (feesDueEl) feesDueEl.value = (parseFloat(cat.totalFee) || 0).toFixed(3);
+    if (!isAdmin) feesEl.readOnly = true;
+  } else if (feesEl && !isAdmin) {
+    // category cleared — unlock fees field for non-admin
+    feesEl.readOnly = false;
   }
   applyContractDiscount(prefix);
 }
@@ -576,16 +595,19 @@ function saveStudent() {
     saveStudentContract(id, collectContractData('s'));
   }
 
-  // save installments
+  // save installments (bulk insert — avoids post/refetch race that can drop rows)
   const rows = document.querySelectorAll('#instRows tr');
   const instPrefix = 'I';
+  const existingInstNums = (CACHE['installments']||[]).map(i => parseInt((i.id||'').replace(instPrefix,'')) || 0);
+  let nextInstNum = (existingInstNums.length ? Math.max(...existingInstNums) : 0) + 1;
+  const newInstallments = [];
   rows.forEach((row, idx) => {
     const amt  = parseFloat(row.querySelector('.inst-amt').value) || 0;
     const date = row.querySelector('.inst-date').value;
     const note = row.querySelector('.inst-note').value;
     if (amt > 0) {
-      DB.add('installments', {
-        id:        DB.nextId('installments', instPrefix),
+      newInstallments.push({
+        id:        instPrefix + String(nextInstNum++).padStart(3,'0'),
         studentId: id,
         num:       idx + 1,
         amount:    amt,
@@ -597,6 +619,7 @@ function saveStudent() {
       });
     }
   });
+  DB.addBulk('installments', newInstallments);
 
   closeModal('modal-student');
   renderStudentsTable(activeGrade);
@@ -787,8 +810,12 @@ function printContract(studentId) {
       <td>${(inst.dueDate || '').replace(/-/g,'/') || '—'}</td>
     </tr>`).join('');
 
-  const totalFee = cat?.totalFee != null ? cat.totalFee : (s.fees || 0);
-  const offerFee = cat?.offerFee != null ? cat.offerFee : (s.net || 0);
+  // الرسوم المستحقة (display-only) — من بيانات العقد إن وجدت، وإلا من فئة العقد
+  const totalFee = (contractData.feesDue !== undefined && contractData.feesDue !== '' && contractData.feesDue !== null && !isNaN(parseFloat(contractData.feesDue)))
+    ? parseFloat(contractData.feesDue) || 0
+    : (cat?.totalFee != null ? cat.totalFee : (s.fees || 0));
+  // العرض السنوي — من خانة الرسوم بالطالب (تم تخزينها كالعرض السنوي)
+  const offerFee = (s.fees != null ? s.fees : (cat?.offerFee != null ? cat.offerFee : (s.net || 0)));
   const seatFee  = cat?.seatFee  != null ? cat.seatFee  : 0;
 
   let discountLine = '—';
@@ -1587,7 +1614,11 @@ function saveEditStudent(id) {
 
   const rows = document.querySelectorAll('#instRows tr');
   const newInst = [];
+  const newInstRows = [];
   const seenIds = new Set();
+  const instPrefix = 'I';
+  const existingInstNums = allInst.map(i => parseInt((i.id||'').replace(instPrefix,'')) || 0);
+  let nextInstNum = (existingInstNums.length ? Math.max(...existingInstNums) : 0) + 1;
 
   rows.forEach((row, rowIdx) => {
     const instId = row.getAttribute('data-inst-id');
@@ -1607,7 +1638,7 @@ function saveEditStudent(id) {
     } else if (amt > 0) {
       // new installment row
       const ni = {
-        id:        DB.nextId('installments', 'I'),
+        id:        instPrefix + String(nextInstNum++).padStart(3,'0'),
         studentId: id,
         num:       rowIdx + 1,
         amount:    amt,
@@ -1618,9 +1649,12 @@ function saveEditStudent(id) {
         status:    'pending'
       };
       newInst.push(ni);
-      DB.add('installments', ni);
+      newInstRows.push(ni);
     }
   });
+
+  // bulk insert new installments (avoids post/refetch race that can drop rows)
+  DB.addBulk('installments', newInstRows);
 
   // Delete installments that were removed from the DOM (unpaid only)
   originalStudentInst
