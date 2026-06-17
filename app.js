@@ -8,17 +8,18 @@ let currentBranch = 'all'; // active branch filter
 
 // Page titles map
 const PAGE_TITLES = {
-  dashboard: 'لوحة التحكم',
-  students:  'الطلاب',
-  fees:      'الرسوم والأقساط',
-  reports:   'التقارير',
-  clothes:   'مخزن الملابس',
-  supplies:  'المستهلكات',
-  messages:  'رسائل واتساب',
-  autoreply: 'الرد التلقائي',
-  hr:        'شؤون العاملين',
-  licenses:  'التراخيص',
-  settings:  'الإعدادات'
+  dashboard:    'لوحة التحكم',
+  students:     'الطلاب',
+  fees:         'الرسوم والأقساط',
+  reports:      'التقارير',
+  subrevenues:  'الإيرادات الفرعية',
+  clothes:      'مخزن الملابس',
+  supplies:     'المستهلكات',
+  messages:     'رسائل واتساب',
+  autoreply:    'الرد التلقائي',
+  hr:           'شؤون العاملين',
+  licenses:     'التراخيص',
+  settings:     'الإعدادات'
 };
 
 // ============================================================
@@ -228,17 +229,18 @@ function renderCurrentPage() {
 
 function renderPage(id) {
   const map = {
-    dashboard: renderDashboard,
-    students:  renderStudents,
-    fees:      renderFees,
-    reports:   renderReports,
-    clothes:   renderClothes,
-    supplies:  renderSupplies,
-    messages:  renderMessages,
-    autoreply: renderAutoreply,
-    hr:        renderHR,
-    licenses:  renderLicenses,
-    settings:  renderSettings
+    dashboard:   renderDashboard,
+    students:    renderStudents,
+    fees:        renderFees,
+    reports:     renderReports,
+    subrevenues: renderSubRevenues,
+    clothes:     renderClothes,
+    supplies:    renderSupplies,
+    messages:    renderMessages,
+    autoreply:   renderAutoreply,
+    hr:          renderHR,
+    licenses:    renderLicenses,
+    settings:    renderSettings
   };
   if (map[id]) map[id]();
 }
@@ -255,7 +257,10 @@ function renderDashboard() {
   const totalPaid    = students.reduce((s, st) => s + (st.paid || 0), 0);
   const totalNet     = students.reduce((s, st) => s + (st.net  || 0), 0);
   const totalPending = totalNet - totalPaid;
-  const lateInst     = installs.filter(i => i.status === 'pending' && daysUntil(i.dueDate) < 0);
+  // filter late installments to the visible student set (already branch-filtered via filterByBranch)
+  const visibleStudentIds = new Set(students.map(st => st.id));
+  const lateInst = installs.filter(i =>
+    i.status === 'pending' && daysUntil(i.dueDate) < 0 && visibleStudentIds.has(i.studentId));
 
   // Stats cards
   document.getElementById('dashStats').innerHTML = `
@@ -669,7 +674,289 @@ function deleteStudent(id, name) {
 // openStudentInstallments defined in app-students.js
 // exportStudentsExcel defined in app-students.js
 function renderFees()    {}
-function renderReports() {}
+function renderReports() {
+  const tabsEl   = document.getElementById('reportsTabs');
+  const contentEl = document.getElementById('reportsContent');
+  if (!tabsEl || !contentEl) return;
+
+  if (!window._activeReport) window._activeReport = 'daily';
+
+  tabsEl.innerHTML = `
+    <span class="tab ${window._activeReport==='daily'?'active':''}" onclick="switchReport('daily',this)">📅 التقرير اليومي</span>
+    <span class="tab ${window._activeReport==='monthly'?'active':''}" onclick="switchReport('monthly',this)">📆 التقرير الشهري</span>`;
+
+  if (window._activeReport === 'daily') renderDailyReport(contentEl);
+  else renderMonthlyReport(contentEl);
+}
+
+function switchReport(tab, el) {
+  window._activeReport = tab;
+  document.querySelectorAll('#reportsTabs .tab').forEach(t=>t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderReports();
+}
+
+function renderDailyReport(container) {
+  const today = window._reportDate || new Date().toISOString().split('T')[0];
+  const isAdm = isAdmin(currentUser);
+  const userBranch = currentUser?.branch || 'all';
+
+  // Payments collected today
+  const allInst = DB.all('installments').filter(i => i.paidDate === today);
+  const instByBranch = {};
+  const allStudents = DB.all('students');
+  allInst.forEach(i => {
+    const st = allStudents.find(s => s.id === i.studentId);
+    const b = st?.branch || '?';
+    if (!isAdm && b !== userBranch) return;
+    instByBranch[b] = instByBranch[b] || [];
+    instByBranch[b].push(i);
+  });
+
+  // Sub-revenues today
+  const subRevs = DB.all('subRevenues').filter(r => {
+    if (r.date !== today) return false;
+    return isAdm || r.branch === userBranch;
+  });
+
+  const totalInst = allInst.filter(i => {
+    if (!isAdm) { const st = allStudents.find(s=>s.id===i.studentId); return st?.branch===userBranch; }
+    return true;
+  }).reduce((s,i)=>s+(parseFloat(i.amount)||0), 0);
+  const totalSub = subRevs.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📅 التقرير اليومي</span>
+        <input type="date" value="${today}" onchange="window._reportDate=this.value;renderReports()"
+          style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px">
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="stat-card" style="min-width:150px">
+          <div class="stat-icon">💳</div>
+          <div><div class="stat-value" style="color:var(--primary)">${totalInst.toFixed(3)}</div>
+          <div class="stat-label">أقساط محصّلة</div></div>
+        </div>
+        <div class="stat-card" style="min-width:150px">
+          <div class="stat-icon">💵</div>
+          <div><div class="stat-value" style="color:var(--info)">${totalSub.toFixed(3)}</div>
+          <div class="stat-label">إيرادات فرعية</div></div>
+        </div>
+        <div class="stat-card" style="min-width:150px;border:2px solid var(--primary)">
+          <div class="stat-icon">📊</div>
+          <div><div class="stat-value" style="color:var(--primary)">${(totalInst+totalSub).toFixed(3)}</div>
+          <div class="stat-label">الإجمالي اليومي</div></div>
+        </div>
+      </div>
+      ${subRevs.length ? `
+        <div style="font-weight:700;margin-bottom:6px;font-size:13px">💵 الإيرادات الفرعية اليوم</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>الفرع</th><th>النوع</th><th>الوصف</th><th>المبلغ</th></tr></thead>
+          <tbody>${subRevs.map(r=>`
+            <tr>
+              <td>${BRANCHES[r.branch]?.name||r.branch}</td>
+              <td>${r.type||''}</td>
+              <td style="font-size:12px">${r.description||'—'}</td>
+              <td><b>${parseFloat(r.amount||0).toFixed(3)} د.ك</b></td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>` : ''}
+    </div>`;
+}
+
+function renderMonthlyReport(container) {
+  const now = new Date();
+  const month = window._reportMonth || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const isAdm = isAdmin(currentUser);
+  const userBranch = currentUser?.branch || 'all';
+
+  const allStudents = DB.all('students');
+  const paidInst = DB.all('installments').filter(i => (i.paidDate||'').startsWith(month) && (isAdm || allStudents.find(s=>s.id===i.studentId)?.branch===userBranch));
+  const subRevs  = DB.all('subRevenues').filter(r => (r.date||'').startsWith(month) && (isAdm || r.branch===userBranch));
+
+  const totalInst = paidInst.reduce((s,i)=>s+(parseFloat(i.amount)||0), 0);
+  const totalSub  = subRevs.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📆 التقرير الشهري</span>
+        <input type="month" value="${month}" onchange="window._reportMonth=this.value;renderReports()"
+          style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px">
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="stat-card" style="min-width:150px">
+          <div class="stat-icon">💳</div>
+          <div><div class="stat-value" style="color:var(--primary)">${totalInst.toFixed(3)}</div>
+          <div class="stat-label">أقساط محصّلة</div></div>
+        </div>
+        <div class="stat-card" style="min-width:150px">
+          <div class="stat-icon">💵</div>
+          <div><div class="stat-value" style="color:var(--info)">${totalSub.toFixed(3)}</div>
+          <div class="stat-label">إيرادات فرعية</div></div>
+        </div>
+        <div class="stat-card" style="min-width:150px;border:2px solid var(--primary)">
+          <div class="stat-icon">📊</div>
+          <div><div class="stat-value" style="color:var(--primary)">${(totalInst+totalSub).toFixed(3)}</div>
+          <div class="stat-label">الإجمالي الشهري</div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// SUB-REVENUES (إيرادات فرعية)
+// ============================================================
+const SUB_REVENUE_TYPES = ['رحلة', 'بقالة', 'قضاء يوم', 'نشاط خاص', 'غيره'];
+
+function renderSubRevenues() {
+  const all = DB.all('subRevenues');
+  const isAdm = isAdmin(currentUser);
+  const userBranch = currentUser?.branch || 'all';
+
+  // branch filter chips
+  const filterEl = document.getElementById('subRevenuesFilter');
+  if (filterEl) {
+    const chips = isAdm
+      ? `<span class="filter-chip ${(window._subRevBranch||'all')==='all'?'active':''}" onclick="setSubRevBranch('all',this)">الكل</span>` +
+        Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>`
+          <span class="filter-chip ${(window._subRevBranch||'all')===k?'active':''}" onclick="setSubRevBranch('${k}',this)">${v.name}</span>`).join('')
+      : `<span class="filter-chip active">${BRANCHES[userBranch]?.name||''}</span>`;
+    filterEl.innerHTML = chips;
+  }
+
+  const branch = isAdm ? (window._subRevBranch||'all') : userBranch;
+  const rows = branch === 'all' ? all : all.filter(r => r.branch === branch);
+
+  // Table
+  const tableEl = document.getElementById('subRevenuesTable');
+  if (tableEl) {
+    tableEl.innerHTML = `
+      <thead><tr>
+        <th>التاريخ</th><th>الفرع</th><th>النوع</th><th>الوصف</th><th>المبلغ (د.ك)</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${rows.length ? rows.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(r=>`
+          <tr>
+            <td>${r.date||'—'}</td>
+            <td><span class="badge ${BRANCHES[r.branch]?.badge||'badge-gray'}">${BRANCHES[r.branch]?.name||r.branch||'—'}</span></td>
+            <td>${r.type||'—'}</td>
+            <td style="font-size:12px">${r.description||''}</td>
+            <td><b>${parseFloat(r.amount||0).toFixed(3)}</b></td>
+            <td><button class="btn btn-outline btn-sm" onclick="deleteSubRevenue('${r.id}')">🗑️</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="6" style="text-align:center;color:#999">لا توجد إيرادات</td></tr>'}
+      </tbody>`;
+  }
+
+  // Summary by type
+  const summary = document.getElementById('subRevenueSummary');
+  if (summary) {
+    const byType = {};
+    rows.forEach(r => {
+      byType[r.type] = (byType[r.type]||0) + (parseFloat(r.amount)||0);
+    });
+    const total = rows.reduce((s,r)=>s+(parseFloat(r.amount)||0), 0);
+    summary.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+        ${Object.entries(byType).map(([t,v])=>`
+          <div class="stat-card" style="min-width:140px">
+            <div class="stat-icon">💰</div>
+            <div><div class="stat-value" style="font-size:15px">${v.toFixed(3)}</div>
+            <div class="stat-label">${t}</div></div>
+          </div>`).join('')}
+        <div class="stat-card" style="min-width:140px;border:2px solid var(--primary)">
+          <div class="stat-icon">📊</div>
+          <div><div class="stat-value" style="color:var(--primary)">${total.toFixed(3)}</div>
+          <div class="stat-label">الإجمالي</div></div>
+        </div>
+      </div>`;
+  }
+}
+
+function setSubRevBranch(branch, el) {
+  window._subRevBranch = branch;
+  document.querySelectorAll('#subRevenuesFilter .filter-chip').forEach(c=>c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderSubRevenues();
+}
+
+function openAddSubRevenue() {
+  const isAdm = isAdmin(currentUser);
+  const branchOptions = isAdm
+    ? Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')
+    : `<option value="${currentUser.branch}">${BRANCHES[currentUser.branch]?.name||''}</option>`;
+
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div class="modal-overlay" id="modal-add-subrevenue">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><h3>➕ إضافة إيراد فرعي</h3>
+          <button class="modal-close" onclick="document.getElementById('modal-add-subrevenue').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group"><label>التاريخ</label>
+              <input type="date" id="srDate" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+            <div class="form-group"><label>الفرع</label>
+              <select id="srBranch" ${!isAdm?'disabled':''}>${branchOptions}</select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>النوع</label>
+              <select id="srType">
+                ${SUB_REVENUE_TYPES.map(t=>`<option>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group"><label>المبلغ (د.ك)</label>
+              <input type="number" step="0.001" min="0" id="srAmount" placeholder="0.000">
+            </div>
+          </div>
+          <div class="form-group"><label>الوصف / ملاحظات</label>
+            <input type="text" id="srDesc" placeholder="اكتب وصفاً للإيراد...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('modal-add-subrevenue').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveSubRevenue()">💾 حفظ</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modals').appendChild(div.firstElementChild);
+}
+
+function saveSubRevenue() {
+  const date   = document.getElementById('srDate')?.value;
+  const branch = document.getElementById('srBranch')?.value;
+  const type   = document.getElementById('srType')?.value;
+  const amount = parseFloat(document.getElementById('srAmount')?.value) || 0;
+  const desc   = document.getElementById('srDesc')?.value?.trim() || '';
+
+  if (!date || !branch) { showToast('⚠️ أدخل التاريخ والفرع'); return; }
+  if (amount <= 0)       { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
+
+  DB.add('subRevenues', {
+    id:          DB.nextId('subRevenues', 'SR'),
+    date,
+    branch,
+    type,
+    amount,
+    description: desc
+  });
+  document.getElementById('modal-add-subrevenue')?.remove();
+  showToast('✅ تم إضافة الإيراد');
+  renderSubRevenues();
+}
+
+function deleteSubRevenue(id) {
+  if (!confirm('حذف هذا الإيراد؟')) return;
+  DB.remove('subRevenues', id);
+  showToast('🗑️ تم الحذف');
+  renderSubRevenues();
+}
+
 function renderClothes() {}
 function renderSupplies(){}
 function renderMessages(){}

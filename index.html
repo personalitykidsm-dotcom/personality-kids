@@ -29,6 +29,7 @@
     <div class="nav-item" data-page="students">👦 الطلاب</div>
     <div class="nav-item" data-page="fees">💳 الرسوم والأقساط</div>
     <div class="nav-item" data-page="reports">📊 التقارير</div>
+    <div class="nav-item" data-page="subrevenues">💵 الإيرادات الفرعية</div>
 
     <div class="nav-section">المخازن</div>
     <div class="nav-item" data-page="clothes">👕 مخزن الملابس</div>
@@ -111,6 +112,22 @@
       <div id="page-reports" class="page">
         <div class="tabs" id="reportsTabs"></div>
         <div id="reportsContent"></div>
+      </div>
+
+      <!-- Sub-Revenues -->
+      <div id="page-subrevenues" class="page">
+        <div class="card">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>💵 الإيرادات الفرعية</span>
+            <button class="btn btn-primary btn-sm" onclick="openAddSubRevenue()">➕ إضافة إيراد</button>
+          </div>
+          <div class="filter-bar" id="subRevenuesFilter"></div>
+          <div class="table-wrap"><table id="subRevenuesTable"></table></div>
+        </div>
+        <div class="card" id="subRevenueSummaryCard" style="margin-top:16px">
+          <div class="card-title">📊 ملخص الإيرادات</div>
+          <div id="subRevenueSummary"></div>
+        </div>
       </div>
 
       <!-- Clothes -->

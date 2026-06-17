@@ -98,25 +98,33 @@ function openAddStudent() {
           <div class="form-row-3" style="margin-bottom:10px">
             <div class="form-group" style="margin:0">
               <label>عدد الأقساط</label>
-              <input type="number" id="instCount" value="4" min="1" max="24"
+              <input type="number" id="instCount" value="1" min="1" max="24"
                 style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;width:100%"
                 oninput="buildInstRows()">
             </div>
             <div class="form-group" style="margin:0">
-              <label>بداية الأقساط</label>
-              <input type="date" id="instStart"
+              <label>تاريخ القسط الأول (يدوي)</label>
+              <input type="date" id="instFirstDate"
                 style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;width:100%"
                 onchange="buildInstRows()">
             </div>
             <div class="form-group" style="margin:0">
-              <label>كل</label>
+              <label>بداية القسط الثاني</label>
+              <input type="date" id="instStart"
+                style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;width:100%"
+                onchange="buildInstRows()">
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom:10px">
+            <div class="form-group" style="margin:0">
+              <label>الفترة بين الأقساط (من القسط الثاني)</label>
               <select id="instInterval"
                 style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;width:100%"
                 onchange="buildInstRows()">
-                <option value="1">شهر</option>
-                <option value="2">شهرين</option>
-                <option value="3">3 أشهر</option>
-                <option value="6">6 أشهر</option>
+                <option value="1">كل شهر</option>
+                <option value="2">كل شهرين</option>
+                <option value="3">كل 3 أشهر</option>
+                <option value="6">كل 6 أشهر</option>
               </select>
             </div>
           </div>
@@ -241,6 +249,10 @@ function contractFieldsHtml(prefix) {
               <input type="number" step="0.001" id="${prefix}FeesDue">
             </div>
           </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label>سبب الخصم (يظهر في العقد)</label>
+            <input type="text" id="${prefix}CDiscountNote" placeholder="مثال: خصم الإخوة / خصم خاص...">
+          </div>
 
           <div style="margin-bottom:10px">
             <div style="font-weight:600;font-size:12px;color:var(--primary-dark);margin-bottom:8px">📄 البيانات الإضافية للعقد</div>
@@ -286,6 +298,10 @@ function contractFieldsHtml(prefix) {
                   <input type="checkbox" id="${prefix}CGradConsent"> أوافق على حفل التخرج
                 </label>
               </div>
+              <div class="form-group" style="margin-top:10px">
+                <label>ملاحظات العقد (تظهر تحت جدول الأقساط)</label>
+                <textarea id="${prefix}CContractNote" rows="2" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:6px"></textarea>
+              </div>
             </div>
           </div>
         </div>`;
@@ -301,6 +317,7 @@ function collectContractData(prefix) {
     categoryId:     catSel?.value || '',
     discountId:     discSel?.value !== '' ? discSel?.value : '',
     feesDue:        parseFloat(val(prefix + 'FeesDue')) || 0,
+    discountNote:   val(prefix + 'CDiscountNote'),
     nationality:    val(prefix + 'CNationality'),
     civilId:        val(prefix + 'CCivilId'),
     fatherName:     val(prefix + 'CFatherName'),
@@ -321,7 +338,8 @@ function collectContractData(prefix) {
     auth3Relation:  val(prefix + 'CAuth3Relation'),
     auth3Phone:     val(prefix + 'CAuth3Phone'),
     photoConsent:   chk(prefix + 'CPhotoConsent'),
-    gradConsent:    chk(prefix + 'CGradConsent')
+    gradConsent:    chk(prefix + 'CGradConsent'),
+    contractNote:   val(prefix + 'CContractNote')
   };
 }
 
@@ -351,6 +369,8 @@ function fillContractData(prefix, data) {
   setChk(prefix + 'CPhotoConsent',  data.photoConsent);
   setChk(prefix + 'CGradConsent',   data.gradConsent);
   setVal(prefix + 'FeesDue',        data.feesDue);
+  setVal(prefix + 'CDiscountNote',  data.discountNote);
+  setVal(prefix + 'CContractNote',  data.contractNote);
   // category / discount selects (set after options are populated)
   const catSel  = document.getElementById(prefix + 'ContractCategory');
   const discSel = document.getElementById(prefix + 'ContractDiscount');
@@ -420,6 +440,12 @@ function applyContractDiscount(prefix) {
   }
   if (discEl) discEl.value = discAmt.toFixed(3);
 
+  // store active discount info for buildInstRows to use
+  window._activeDiscount = {
+    amount:  discAmt,
+    isGold:  !!(d?.name && /ذهب|بطاق.*ذهب|gold/i.test(d.name))
+  };
+
   // load installment plan from the selected category, if any
   const cat = bd.categories?.[catSel?.value];
   if (cat && cat.installments && cat.installments.length) {
@@ -458,15 +484,26 @@ function buildInstRows() {
 
   // Plan mode: use the installment plan defined on the selected contract category
   if (instMode === 'plan' && window._contractPlanRows && window._contractPlanRows.length) {
-    const startVal = document.getElementById('instStart').value;
+    const firstDate = document.getElementById('instFirstDate')?.value || '';
+    const startVal  = document.getElementById('instStart').value;
     const months    = parseInt(document.getElementById('instInterval').value) || 1;
+
+    // Apply discount to first (gold card) or last (all others) installment
+    const _disc    = window._activeDiscount || { amount: 0, isGold: false };
+    const planAmts = window._contractPlanRows.map(r => parseFloat(r.amount) || 0);
+    if (_disc.amount > 0) {
+      const idx = _disc.isGold ? 0 : planAmts.length - 1;
+      planAmts[idx] = Math.max(0, parseFloat((planAmts[idx] - _disc.amount).toFixed(3)));
+    }
+
     let rows = '';
     window._contractPlanRows.forEach((r, i) => {
-      const date = startVal ? addMonths(startVal, months * i) : '';
+      // i=0 → تاريخ القسط الأول (يدوي), i>0 → من بداية القسط الثاني + interval
+      const date = i === 0 ? firstDate : (startVal ? addMonths(startVal, months * (i - 1)) : '');
       rows += `<tr>
         <td style="padding:6px 10px;color:var(--text-muted)">${i + 1}</td>
         <td style="padding:4px 6px">
-          <input type="number" class="inst-input inst-amt" value="${r.amount || 0}" step="0.001" min="0"
+          <input type="number" class="inst-input inst-amt" value="${planAmts[i]}" step="0.001" min="0"
             style="width:110px" oninput="updateInstTotal()">
         </td>
         <td style="padding:4px 6px">
@@ -486,17 +523,19 @@ function buildInstRows() {
     return;
   }
 
-  const n        = parseInt(document.getElementById('instCount').value) || 1;
-  const startVal = document.getElementById('instStart').value;
-  const months   = parseInt(document.getElementById('instInterval').value) || 1;
-  const net      = parseFloat(document.getElementById('sNet').value) || 0;
-  const base     = net > 0 ? parseFloat((net / n).toFixed(3)) : 0;
-  const last     = net > 0 ? parseFloat((net - base * (n - 1)).toFixed(3)) : 0;
+  const n         = parseInt(document.getElementById('instCount').value) || 1;
+  const firstDate = document.getElementById('instFirstDate')?.value || '';
+  const startVal  = document.getElementById('instStart').value;
+  const months    = parseInt(document.getElementById('instInterval').value) || 1;
+  const net       = parseFloat(document.getElementById('sNet').value) || 0;
+  const base      = net > 0 ? parseFloat((net / n).toFixed(3)) : 0;
+  const last      = net > 0 ? parseFloat((net - base * (n - 1)).toFixed(3)) : 0;
 
   let rows = '';
   for (let i = 1; i <= n; i++) {
     const amt  = instMode === 'equal' ? (i === n ? last : base) : base;
-    const date = startVal ? addMonths(startVal, months * (i - 1)) : '';
+    // i=1 → تاريخ القسط الأول (يدوي), i>1 → من بداية القسط الثاني + interval
+    const date = i === 1 ? firstDate : (startVal ? addMonths(startVal, months * (i - 2)) : '');
     rows += `<tr>
       <td style="padding:6px 10px;color:var(--text-muted)">${i}</td>
       <td style="padding:4px 6px">
@@ -818,13 +857,16 @@ function printContract(studentId) {
   const offerFee = (s.fees != null ? s.fees : (cat?.offerFee != null ? cat.offerFee : (s.net || 0)));
   const seatFee  = cat?.seatFee  != null ? cat.seatFee  : 0;
 
+  const discountNote = contractData.discountNote || '';
   let discountLine = '—';
   if (discount) {
+    const name = discount.name + (discountNote ? ` — ${discountNote}` : '');
     discountLine = discount.type === 'percent'
-      ? `${discount.name} (${discount.value}%)`
-      : `${discount.name} (${parseFloat(discount.value || 0).toFixed(3)} د.ك)`;
+      ? `${name} (${discount.value}%)`
+      : `${name} (${parseFloat(discount.value || 0).toFixed(3)} د.ك)`;
   } else if (s.discount) {
-    discountLine = `${parseFloat(s.discount).toFixed(3)} د.ك`;
+    const reason = discountNote ? ` (${discountNote})` : '';
+    discountLine = `${parseFloat(s.discount).toFixed(3)} د.ك${reason}`;
   }
 
   const maritalLabels = { married:'متزوجان', divorced:'مطلقان', widow:'أرمل / أرملة', single:'أخرى' };
@@ -906,7 +948,7 @@ function printContract(studentId) {
     <h3>ثانياً: بند الرسوم والأقساط المجدولة</h3>
     <table class="fee-table">
       <tr><th>الرسوم المستحقة</th><td>${parseFloat(totalFee).toFixed(3)} د.ك</td><th>العرض السنوي</th><td><b>${parseFloat(offerFee).toFixed(3)} د.ك</b></td></tr>
-      <tr><th>حجز المقعد</th><td>${parseFloat(seatFee).toFixed(3)} د.ك</td><th>الخصم</th><td>${discountLine}</td></tr>
+      <tr><th>الخصم</th><td colspan="3">${discountLine}</td></tr>
       <tr><th>الصافي المستحق</th><td colspan="3"><b style="font-size:15px">${parseFloat(s.net || offerFee).toFixed(3)} د.ك</b></td></tr>
     </table>
     <p style="margin:-4px 0 8px">خلال الفترة من سبتمبر (9) إلى مارس (3)، ضمن خطة دفع معتمدة:</p>
@@ -914,6 +956,7 @@ function printContract(studentId) {
       <thead><tr><th>#</th><th>البند</th><th>المبلغ</th><th>تاريخ الاستحقاق</th></tr></thead>
       <tbody>${instRows || '<tr><td colspan="4" style="text-align:center;color:#999">لا توجد أقساط</td></tr>'}</tbody>
     </table>
+    ${contractData.contractNote ? `<p style="margin:6px 0 12px;font-size:12px;color:#555">${contractData.contractNote}</p>` : ''}
 
     <h3>ثالثاً: بند الشروط والأحكام</h3>
     ${termsSectionHtml}

@@ -113,7 +113,8 @@ function toCamel(obj) {
 const TABLES = {
   users:'users', students:'students', installments:'installments',
   employees:'employees', leaves:'leaves', supplies:'supplies',
-  clothes:'clothes', licenses:'licenses', refunds:'refunds'
+  clothes:'clothes', licenses:'licenses', refunds:'refunds',
+  subRevenues:'sub_revenues'
 };
 
 // ============================================================
