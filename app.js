@@ -890,7 +890,7 @@ function openAddSubRevenue() {
 
   const div = document.createElement('div');
   div.innerHTML = `
-    <div class="modal-overlay" id="modal-add-subrevenue">
+    <div class="modal-overlay open" id="modal-add-subrevenue">
       <div class="modal" style="max-width:420px">
         <div class="modal-header"><h3>➕ إضافة إيراد فرعي</h3>
           <button class="modal-close" onclick="document.getElementById('modal-add-subrevenue').remove()">✕</button>
