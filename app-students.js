@@ -239,10 +239,10 @@ function contractFieldsHtml(prefix) {
               </select>
             </div>
             <div class="form-group">
-              <label>الخصم</label>
-              <select id="${prefix}ContractDiscount" onchange="applyContractDiscount('${prefix}')">
-                <option value="">بدون خصم</option>
-              </select>
+              <label>الخصم (يمكن تحديد أكثر من خصم)</label>
+              <div id="${prefix}ContractDiscount" style="border:1px solid var(--border);border-radius:6px;padding:6px 8px;max-height:130px;overflow-y:auto;background:var(--card-bg);font-size:12px">
+                <span style="color:var(--text-muted)">— اختر الفرع أولاً —</span>
+              </div>
             </div>
             <div class="form-group">
               <label>الرسوم المستحقة (د.ك)</label>
@@ -311,11 +311,14 @@ function contractFieldsHtml(prefix) {
 function collectContractData(prefix) {
   const val = (id) => document.getElementById(id)?.value || '';
   const chk = (id) => !!document.getElementById(id)?.checked;
-  const catSel  = document.getElementById(prefix + 'ContractCategory');
-  const discSel = document.getElementById(prefix + 'ContractDiscount');
+  const catSel   = document.getElementById(prefix + 'ContractCategory');
+  const discCont = document.getElementById(prefix + 'ContractDiscount');
+  const discountIds = discCont
+    ? [...discCont.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value)
+    : [];
   return {
     categoryId:     catSel?.value || '',
-    discountId:     discSel?.value !== '' ? discSel?.value : '',
+    discountIds:    discountIds,
     feesDue:        parseFloat(val(prefix + 'FeesDue')) || 0,
     discountNote:   val(prefix + 'CDiscountNote'),
     nationality:    val(prefix + 'CNationality'),
@@ -371,11 +374,19 @@ function fillContractData(prefix, data) {
   setVal(prefix + 'FeesDue',        data.feesDue);
   setVal(prefix + 'CDiscountNote',  data.discountNote);
   setVal(prefix + 'CContractNote',  data.contractNote);
-  // category / discount selects (set after options are populated)
-  const catSel  = document.getElementById(prefix + 'ContractCategory');
-  const discSel = document.getElementById(prefix + 'ContractDiscount');
-  if (catSel && data.categoryId)  catSel.value  = data.categoryId;
-  if (discSel && data.discountId !== '' && data.discountId !== undefined && data.discountId !== null) discSel.value = data.discountId;
+  // category / discount (set after options are populated)
+  const catSel   = document.getElementById(prefix + 'ContractCategory');
+  const discCont = document.getElementById(prefix + 'ContractDiscount');
+  if (catSel && data.categoryId) catSel.value = data.categoryId;
+  if (discCont) {
+    // support both new discountIds (array) and legacy discountId (single)
+    const ids = Array.isArray(data.discountIds) && data.discountIds.length
+      ? data.discountIds.map(String)
+      : (data.discountId !== undefined && data.discountId !== '' && data.discountId !== null ? [String(data.discountId)] : []);
+    discCont.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.checked = ids.includes(cb.value);
+    });
+  }
   // lock fees field if a category is already applied (non-admin)
   if (data.categoryId && currentUser?.role !== 'admin') {
     const feesEl = document.getElementById(prefix==='s' ? 'sFees' : 'esFees');
@@ -388,14 +399,23 @@ function populateContractSelects(branch, catSelId, discSelId) {
   const settings = getContractSettings();
   const bd = settings[branch] || { categories:{}, discounts:[] };
   const catSel  = document.getElementById(catSelId);
-  const discSel = document.getElementById(discSelId);
+  const discCont = document.getElementById(discSelId);
+  // derive prefix from discSelId: 'sContractDiscount' → 's', 'esContractDiscount' → 'es'
+  const pfx = discSelId.replace('ContractDiscount', '');
   if (catSel) {
     catSel.innerHTML = '<option value="">— اختر الفئة —</option>' +
       Object.entries(bd.categories).map(([id,c]) => `<option value="${id}">${c.label}</option>`).join('');
   }
-  if (discSel) {
-    discSel.innerHTML = '<option value="">بدون خصم</option>' +
-      bd.discounts.map((d,i) => `<option value="${i}">${d.name} (${d.type==='percent' ? d.value+'%' : d.value+' د.ك'})</option>`).join('');
+  if (discCont) {
+    if (!bd.discounts || !bd.discounts.length) {
+      discCont.innerHTML = '<span style="color:var(--text-muted)">لا توجد خصومات</span>';
+    } else {
+      discCont.innerHTML = bd.discounts.map((d, i) => `
+        <label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer">
+          <input type="checkbox" value="${i}" onchange="applyContractDiscount('${pfx}')">
+          ${d.name} (${d.type === 'percent' ? d.value + '%' : parseFloat(d.value||0).toFixed(3) + ' د.ك'})
+        </label>`).join('');
+    }
   }
 }
 
@@ -434,16 +454,22 @@ function applyContractDiscount(prefix) {
 
   const fees = parseFloat(feesEl?.value) || 0;
   let discAmt = 0;
-  const d = bd.discounts[parseInt(discSel?.value)];
-  if (d) {
-    discAmt = d.type === 'percent' ? fees * (parseFloat(d.value)||0) / 100 : (parseFloat(d.value)||0);
-  }
+  let isGoldDisc = false;
+  const discCont = document.getElementById(prefix + 'ContractDiscount');
+  const checkedBoxes = discCont ? [...discCont.querySelectorAll('input[type=checkbox]:checked')] : [];
+  checkedBoxes.forEach(cb => {
+    const d = bd.discounts[parseInt(cb.value)];
+    if (d) {
+      discAmt += d.type === 'percent' ? fees * (parseFloat(d.value)||0) / 100 : (parseFloat(d.value)||0);
+      if (/ذهب|بطاق.*ذهب|gold/i.test(d.name)) isGoldDisc = true;
+    }
+  });
   if (discEl) discEl.value = discAmt.toFixed(3);
 
   // store active discount info for buildInstRows to use
   window._activeDiscount = {
-    amount:  discAmt,
-    isGold:  !!(d?.name && /ذهب|بطاق.*ذهب|gold/i.test(d.name))
+    amount: discAmt,
+    isGold: isGoldDisc
   };
 
   // load installment plan from the selected category, if any
@@ -533,7 +559,7 @@ function buildInstRows() {
 
   let rows = '';
   for (let i = 1; i <= n; i++) {
-    const amt  = instMode === 'equal' ? (i === n ? last : base) : base;
+    const amt = instMode === 'equal' ? (i === n ? last : base) : 0;
     // i=1 → تاريخ القسط الأول (يدوي), i>1 → من بداية القسط الثاني + interval
     const date = i === 1 ? firstDate : (startVal ? addMonths(startVal, months * (i - 2)) : '');
     rows += `<tr>
@@ -805,6 +831,15 @@ function getContractTermsHtml(contractData) {
       <p><b>الحادي عشر: الالتزام باللوائح</b></p>
       <p>يقر ولي الأمر بأنه اطلع على جميع الأنظمة واللوائح والسياسات الخاصة بالحضانة ويلتزم بها.</p>
       <p>جميع الخصومات والعروض المقدمة من الحضانة مشروطة باستمرار الطفل حتى نهاية الفترة المتفق عليها والالتزام الكامل بسداد الرسوم، وفي حال الانسحاب أو إيقاف التسجيل قبل انتهاء الفترة المتفق عليها يحق للحضانة إلغاء الخصم واسترداد قيمة الخصومات الممنوحة وإعادة احتساب الرسوم بالسعر الأساسي.</p>
+
+      <p><b>الثاني عشر: المسؤولية عن الأغراض</b></p>
+      <p>الحضانة غير مسؤولة عن فقدان الأغراض الثمينة.</p>
+
+      <p><b>الثالث عشر: إيقاف الطفل أو فصله</b></p>
+      <p>يحق للحضانة توقيف الطفل أو فصله في حال إثبات سلوك مخالف أو عدم الالتزام باللوائح من ناحية الطفل أو ولي الأمر.</p>
+
+      <p><b>الرابع عشر: الكورس الأول والعرض السنوي</b></p>
+      <p>عند اختيار ولي الأمر الكورس الأول فقط، لا يحق له بعد ذلك أن يتم دمجه في العرض السنوي.</p>
     </div>
 
     <div class="ack">
@@ -835,7 +870,11 @@ function printContract(studentId) {
   const settings = getContractSettings();
   const bd = settings[s.branch] || { categories:{}, discounts:[], terms:'' };
   const cat      = bd.categories?.[contractData.categoryId];
-  const discount = bd.discounts?.[parseInt(contractData.discountId)];
+  // support both new discountIds (array) and legacy discountId (single)
+  const _discIds = Array.isArray(contractData.discountIds) && contractData.discountIds.length
+    ? contractData.discountIds
+    : (contractData.discountId !== undefined && contractData.discountId !== '' ? [String(contractData.discountId)] : []);
+  const selectedDiscounts = _discIds.map(id => bd.discounts?.[parseInt(id)]).filter(Boolean);
   const nursery  = DB.get('nurserySettings') || {};
   const branchName = BRANCHES[s.branch]?.name || s.branch;
   const gradeLabel  = getGrades().find(g => g.id === s.grade)?.label || s.grade || '—';
@@ -859,11 +898,14 @@ function printContract(studentId) {
 
   const discountNote = contractData.discountNote || '';
   let discountLine = '—';
-  if (discount) {
-    const name = discount.name + (discountNote ? ` — ${discountNote}` : '');
-    discountLine = discount.type === 'percent'
-      ? `${name} (${discount.value}%)`
-      : `${name} (${parseFloat(discount.value || 0).toFixed(3)} د.ك)`;
+  if (selectedDiscounts.length > 0) {
+    const parts = selectedDiscounts.map(d =>
+      d.type === 'percent'
+        ? `${d.name} (${d.value}%)`
+        : `${d.name} (${parseFloat(d.value || 0).toFixed(3)} د.ك)`
+    );
+    discountLine = parts.join(' + ');
+    if (discountNote) discountLine += ` — ${discountNote}`;
   } else if (s.discount) {
     const reason = discountNote ? ` (${discountNote})` : '';
     discountLine = `${parseFloat(s.discount).toFixed(3)} د.ك${reason}`;
