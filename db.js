@@ -95,7 +95,8 @@ const TO_SNAKE = {
   expiryDate:'expiry_date', issueDate:'issue_date',
   minQty:'min_qty', idNo:'id_no', lastLogin:'last_login',
   partialPaid:'partial_paid', payLink:'pay_link',
-  receiptImg:'receipt_img', receiptName:'receipt_name'
+  receiptImg:'receipt_img', receiptName:'receipt_name',
+  civilIdImg:'civil_id_img'
 };
 const TO_CAMEL = Object.fromEntries(Object.entries(TO_SNAKE).map(([k,v])=>[v,k]));
 

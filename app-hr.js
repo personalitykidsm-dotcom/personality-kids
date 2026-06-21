@@ -172,7 +172,13 @@ function openAddEmployee() {
           <div class="form-group"><label>نوع العقد</label>
             <select id="eType"><option>دوام كامل</option><option>دوام جزئي</option><option>مؤقت</option><option>تجريبي</option></select>
           </div>
-          <div class="form-group"><label>أيام الإجازة السنوية</label><input type="number" id="eLeave" value="30" min="0"></div>
+          <div class="form-group"></div>
+        </div>
+        <div class="form-group">
+          <label>صورة البطاقة المدنية</label>
+          <input type="file" id="eCivilIdImg" accept="image/*"
+            style="display:block;width:100%;font-size:12px" onchange="previewEmpCivilId(this)">
+          <div id="eCivilIdImgPreview" style="margin-top:8px"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -183,28 +189,50 @@ function openAddEmployee() {
   </div>`;
 }
 
+function previewEmpCivilId(input) {
+  const prev = document.getElementById('eCivilIdImgPreview');
+  if (!input.files || !input.files[0]) { prev.innerHTML = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">`;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 function saveEmployee() {
   const name = document.getElementById('eName').value.trim();
   if (!name) { showToast('⚠️ أدخل اسم الموظف'); return; }
-  DB.add('employees', {
-    id: DB.nextId('employees','E'),
-    name,
-    nationality:   document.getElementById('eNat').value,
-    role:          document.getElementById('eRole').value,
-    branch:        document.getElementById('eBranch').value,
-    phone:         document.getElementById('ePhone').value,
-    idNo:          document.getElementById('eIdNo').value,
-    salary:        parseFloat(document.getElementById('eSalary').value)||0,
-    allowance:     parseFloat(document.getElementById('eAllow').value)||0,
-    contractStart: document.getElementById('eStart').value,
-    contractEnd:   document.getElementById('eEnd').value,
-    contractType:  document.getElementById('eType').value,
-    annualLeave:   parseInt(document.getElementById('eLeave').value)||30,
-    status:        'active'
-  });
-  closeModal('modal-emp');
-  renderHR();
-  showToast('✅ تم إضافة الموظف: ' + name);
+  const civilIdFile = document.getElementById('eCivilIdImg')?.files?.[0];
+
+  const finishSave = (civilIdImg) => {
+    DB.add('employees', {
+      id: DB.nextId('employees','E'),
+      name,
+      nationality:   document.getElementById('eNat').value,
+      role:          document.getElementById('eRole').value,
+      branch:        document.getElementById('eBranch').value,
+      phone:         document.getElementById('ePhone').value,
+      idNo:          document.getElementById('eIdNo').value,
+      salary:        parseFloat(document.getElementById('eSalary').value)||0,
+      allowance:     parseFloat(document.getElementById('eAllow').value)||0,
+      contractStart: document.getElementById('eStart').value,
+      contractEnd:   document.getElementById('eEnd').value,
+      contractType:  document.getElementById('eType').value,
+      civilIdImg:    civilIdImg || '',
+      status:        'active'
+    });
+    closeModal('modal-emp');
+    renderHR();
+    showToast('✅ تم إضافة الموظف: ' + name);
+  };
+
+  if (civilIdFile) {
+    const reader = new FileReader();
+    reader.onload = e => finishSave(e.target.result);
+    reader.readAsDataURL(civilIdFile);
+  } else {
+    finishSave('');
+  }
 }
 
 function openEditEmployee(id) {

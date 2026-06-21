@@ -1308,7 +1308,11 @@ function previewPayReceipt(input) {
 }
 
 function confirmPay(instId, studentId) {
-  const methodEl  = document.querySelector('#payMethodChips .pay-chip.selected');
+  // Scoped to #modal-pay because #payMethodChips also exists (hidden) on the
+  // "الرسوم" page — pages are only hidden via CSS, never removed from the DOM,
+  // so an unscoped lookup could silently grab that page's default-selected
+  // "نقدي" chip instead of whatever the user picked in this modal.
+  const methodEl  = document.querySelector('#modal-pay #payMethodChips .pay-chip.selected');
   const method    = methodEl ? methodEl.textContent.trim() : 'نقدي';
   const date      = document.getElementById('payDate').value;
   const link      = document.getElementById('payLink')?.value?.trim() || '';

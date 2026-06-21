@@ -185,7 +185,11 @@ function registerPayment() {
   const instId = document.getElementById('payInst').value;
   const amt    = parseFloat(document.getElementById('payAmt').value);
   const date   = document.getElementById('payDate').value;
-  const method = document.querySelector('#payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
+  // Scoped to #fees-pay because #payMethodChips also exists inside the
+  // per-installment payment modal (app-students.js) — pages stay in the DOM
+  // (just hidden), so an unscoped lookup could grab the wrong one if both
+  // happen to be present at once.
+  const method = document.querySelector('#fees-pay #payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
 
   if (!sid) { showToast('⚠️ اختر الطالب'); return; }
   if (!amt || amt <= 0) { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
