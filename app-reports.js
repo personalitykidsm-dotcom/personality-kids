@@ -1767,7 +1767,17 @@ function renderDailyReport() {
     else if (m.includes('رابط')) key = 'رابط';
     totals[key] += amt;
   });
-  const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'];
+
+  // Sub-revenues for the same day/branch — linked into the daily report so
+  // the grand total reflects installments + sub-revenues together.
+  const subRevs = (DB.all('subRevenues') || []).filter(function(r) {
+    if ((r.date || '').toString().slice(0,10) !== date) return false;
+    if (branch && branch !== 'all') return r.branch === branch;
+    return true;
+  });
+  const totalSub = subRevs.reduce(function(s,r){ return s + (parseFloat(r.amount)||0); }, 0);
+
+  const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'] + totalSub;
 
   let rowsHtml = '';
   installs.forEach(function(i, idx) {
@@ -1794,7 +1804,7 @@ function renderDailyReport() {
   html += '<p style="margin:4px 0;font-size:13px">اليوم: ' + dateAr + '</p>';
   html += '</div>';
 
-  if (installs.length === 0) {
+  if (installs.length === 0 && subRevs.length === 0) {
     html += '<p style="text-align:center;color:#999;padding:30px">لا توجد مدفوعات في هذا اليوم</p>';
   } else {
     html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
@@ -1807,7 +1817,7 @@ function renderDailyReport() {
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">رقم السند</th>';
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المباشرة</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">الملاحظات</th>';
-    html += '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+    html += '</tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="8" style="text-align:center;color:#999;border:1px solid #ccc;padding:10px">لا توجد مدفوعات أقساط في هذا اليوم</td></tr>') + '</tbody></table>';
 
     html += '<div style="display:flex;justify-content:space-between;margin-top:20px;gap:16px;flex-wrap:wrap">';
     html += '<table style="border-collapse:collapse;font-size:13px;min-width:200px">';
@@ -1815,6 +1825,7 @@ function renderDailyReport() {
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['رابط']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['كي نت']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['برنامج']) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيرادات الفرعية</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totalSub) + '</td></tr>';
     html += '<tr style="font-weight:bold;background:#f0f0f0"><td style="border:1px solid #ccc;padding:6px 12px">الإجمالي</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(total) + '</td></tr>';
     html += '</table>';
     html += '<table style="border-collapse:collapse;font-size:13px;min-width:240px">';
@@ -1824,7 +1835,36 @@ function renderDailyReport() {
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">التوقيع</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
     html += '</table></div>';
   }
-  html += '</div>';
+
+  // ── Sub-revenues breakdown (totals already linked into the box above) ──
+  // Kept inside #dailyPrintArea so it's included when the report is printed.
+  if (subRevs.length > 0) {
+    html += '<div id="dailySubRevArea" style="margin-top:24px;font-family:inherit;direction:rtl">';
+    html += '<h4 style="margin:0 0 8px;color:#1a5c42">💵 الإيرادات الفرعية</h4>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    html += '<thead><tr style="background:#1a5c42;color:#fff">';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">م</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">الفرع</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">النوع</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">الوصف</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المبلغ</th>';
+    html += '</tr></thead><tbody>';
+    subRevs.forEach(function(r, idx) {
+      var bname = (typeof BRANCHES !== 'undefined' && BRANCHES[r.branch]) ? BRANCHES[r.branch].name : (r.branch || '—');
+      html += '<tr>';
+      html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (idx+1) + '</td>';
+      html += '<td style="border:1px solid #ccc;padding:5px">' + bname + '</td>';
+      html += '<td style="border:1px solid #ccc;padding:5px">' + (r.type || '—') + '</td>';
+      html += '<td style="border:1px solid #ccc;padding:5px">' + (r.description || '—') + '</td>';
+      html += '<td style="text-align:center;border:1px solid #ccc;padding:5px;font-weight:bold">' + fmtKD(parseFloat(r.amount||0)) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div style="text-align:left;margin-top:6px;font-size:13px;font-weight:bold">إجمالي الإيرادات الفرعية: ' + fmtKD(totalSub) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>'; // close #dailyPrintArea
+
   document.getElementById('dailyReportContent').innerHTML = html;
 }
 
