@@ -132,31 +132,37 @@ const DB = {
       .catch(()=> SB.patch('settings','key=eq.'+key,{value:val}).catch(()=>{}));
   },
 
+  // Returns a Promise<boolean> — true once the row is confirmed written to
+  // Supabase, false if the insert itself failed. Callers that need to insert
+  // a *related* row afterwards (e.g. installments referencing a new student)
+  // should `await` this first to avoid a race where the child row's
+  // foreign key check runs before the parent row is committed.
   add(key, item) {
     const row = toSnake(item);
     CACHE[key] = CACHE[key]||[];
     CACHE[key].push(row);
-    SB.post(TABLES[key]||key, row)
+    return SB.post(TABLES[key]||key, row)
       .then(()=> SB.get(TABLES[key]||key,'order=id')
-        .then(rows=>{ CACHE[key]=rows||[]; })
-        .catch(()=>{})
+        .then(rows=>{ CACHE[key]=rows||[]; return true; })
+        .catch(()=> true)
       )
-      .catch(e=> console.warn('add err:',e));
+      .catch(e=> { console.warn('add err:',e); return false; });
   },
 
   // Insert multiple rows in a single request (avoids the post+refetch race
   // that can drop rows when add() is called repeatedly in a tight loop)
+  // Returns a Promise<boolean> like add() above.
   addBulk(key, items) {
-    if (!items || !items.length) return;
+    if (!items || !items.length) return Promise.resolve(true);
     const rows = items.map(toSnake);
     CACHE[key] = CACHE[key]||[];
     rows.forEach(r => CACHE[key].push(r));
-    SB.post(TABLES[key]||key, rows)
+    return SB.post(TABLES[key]||key, rows)
       .then(()=> SB.get(TABLES[key]||key,'order=id')
-        .then(r=>{ CACHE[key]=r||[]; })
-        .catch(()=>{})
+        .then(r=>{ CACHE[key]=r||[]; return true; })
+        .catch(()=> true)
       )
-      .catch(e=> console.warn('addBulk err:',e));
+      .catch(e=> { console.warn('addBulk err:',e); return false; });
   },
 
   update(key, id, changes) {

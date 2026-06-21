@@ -620,7 +620,7 @@ function updateInstTotal() {
 }
 
 // ===== SAVE STUDENT =====
-function saveStudent() {
+async function saveStudent() {
   const name  = document.getElementById('sName').value.trim();
   const phone1= document.getElementById('sPhone1').value.trim();
   const fees  = parseFloat(document.getElementById('sFees').value) || 0;
@@ -653,7 +653,12 @@ function saveStudent() {
     withdrawDate:    ''
   };
 
-  DB.add('students', student);
+  // Wait for the student row to be confirmed on the server before inserting
+  // anything that references it (installments have a student_id FK). Without
+  // this, the installments insert can race ahead of the student insert and
+  // get silently rejected — the UI still shows "saved" because the local
+  // cache was updated optimistically, but the rows never actually persisted.
+  const studentSaved = await DB.add('students', student);
 
   // save contract data (morning branches only)
   if (isMorningBranch(branch)) {
@@ -684,12 +689,23 @@ function saveStudent() {
       });
     }
   });
-  DB.addBulk('installments', newInstallments);
+
+  let instSaved = true;
+  if (newInstallments.length) {
+    instSaved = studentSaved ? await DB.addBulk('installments', newInstallments) : false;
+  }
 
   closeModal('modal-student');
   renderStudentsTable(activeGrade);
   renderDashboard();
-  showToast('✅ تم حفظ الطالب: ' + name);
+
+  if (!studentSaved) {
+    showToast('❌ فشل حفظ الطالب على السيرفر، حاول مرة أخرى');
+  } else if (!instSaved) {
+    showToast('⚠️ تم حفظ الطالب لكن فشل حفظ الأقساط — أضفها من شاشة "الأقساط"');
+  } else {
+    showToast('✅ تم حفظ الطالب: ' + name);
+  }
 }
 
 // ===== PRINT STUDENT FORM =====
