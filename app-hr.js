@@ -204,8 +204,13 @@ function saveEmployee() {
   if (!name) { showToast('⚠️ أدخل اسم الموظف'); return; }
   const civilIdFile = document.getElementById('eCivilIdImg')?.files?.[0];
 
-  const finishSave = (civilIdImg) => {
-    DB.add('employees', {
+  const finishSave = async (civilIdImg) => {
+    // DB.add() resolves false if the insert never actually reached Supabase
+    // (RLS rejection, schema mismatch, network error, etc.) — it still pushes
+    // optimistically into the local cache first, which is why the employee
+    // used to *appear* saved and then vanish on the next 10s auto-refresh.
+    // We now wait for the real result before celebrating.
+    const ok = await DB.add('employees', {
       id: DB.nextId('employees','E'),
       name,
       nationality:   document.getElementById('eNat').value,
@@ -221,6 +226,12 @@ function saveEmployee() {
       civilIdImg:    civilIdImg || '',
       status:        'active'
     });
+
+    if (!ok) {
+      showToast('❌ فشل حفظ الموظف على السيرفر — افتح أدوات المطوّر (F12) ⟶ Console وشوف رسالة الخطأ تحت "SB.post employees error"، أو راجع صلاحيات (RLS) جدول employees في Supabase');
+      return; // keep the modal open so the entered data isn't lost
+    }
+
     closeModal('modal-emp');
     renderHR();
     showToast('✅ تم إضافة الموظف: ' + name);
