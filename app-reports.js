@@ -1772,16 +1772,26 @@ function renderDailyReport() {
     totals[key] += amt;
   });
 
-  // Sub-revenues for the same day/branch — linked into the daily report so
-  // the grand total reflects installments + sub-revenues together.
+  // Sub-revenues for the same day/branch — folded into the matching payment-
+  // method total (نقدي/رابط/كي نت/برنامج) so the report shows one true figure
+  // per payment type instead of a separate "sub-revenues" line.
   const subRevs = (DB.all('subRevenues') || []).filter(function(r) {
     if ((r.date || '').toString().slice(0,10) !== date) return false;
     if (branch && branch !== 'all') return r.branch === branch;
     return true;
   });
+  subRevs.forEach(function(r) {
+    const amt = parseFloat(r.amount || 0);
+    const m = (r.method || 'نقدي').toString().replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim();
+    let key = 'نقدي';
+    if (m.includes('برنامج')) key = 'برنامج';
+    else if (m.includes('كي نت') || m.includes('knet') || m.includes('KNET')) key = 'كي نت';
+    else if (m.includes('رابط')) key = 'رابط';
+    totals[key] += amt;
+  });
   const totalSub = subRevs.reduce(function(s,r){ return s + (parseFloat(r.amount)||0); }, 0);
 
-  const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'] + totalSub;
+  const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'];
 
   let rowsHtml = '';
   installs.forEach(function(i, idx) {
@@ -1829,7 +1839,6 @@ function renderDailyReport() {
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['رابط']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['كي نت']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['برنامج']) + '</td></tr>';
-    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيرادات الفرعية</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totalSub) + '</td></tr>';
     html += '<tr style="font-weight:bold;background:#f0f0f0"><td style="border:1px solid #ccc;padding:6px 12px">الإجمالي</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(total) + '</td></tr>';
     html += '</table>';
     html += '<table style="border-collapse:collapse;font-size:13px;min-width:240px">';
@@ -1850,6 +1859,7 @@ function renderDailyReport() {
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">م</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">الفرع</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">النوع</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">طريقة الدفع</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">الوصف</th>';
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المبلغ</th>';
     html += '</tr></thead><tbody>';
@@ -1859,6 +1869,7 @@ function renderDailyReport() {
       html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (idx+1) + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + bname + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + (r.type || '—') + '</td>';
+      html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (r.method || 'نقدي') + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + (r.description || '—') + '</td>';
       html += '<td style="text-align:center;border:1px solid #ccc;padding:5px;font-weight:bold">' + fmtKD(parseFloat(r.amount||0)) + '</td>';
       html += '</tr>';
@@ -1884,4 +1895,3 @@ function printDailyReport() {
   w.document.close();
   setTimeout(()=>w.print(),500);
 }
-

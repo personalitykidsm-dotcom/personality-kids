@@ -119,7 +119,10 @@
         <div class="card">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
             <span>💵 الإيرادات الفرعية</span>
-            <button class="btn btn-primary btn-sm" onclick="openAddSubRevenue()">➕ إضافة إيراد</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="exportSubRevenuesExcel()">📥 تصدير Excel</button>
+              <button class="btn btn-primary btn-sm" onclick="openAddSubRevenue()">➕ إضافة إيراد</button>
+            </div>
           </div>
           <div class="filter-bar" id="subRevenuesFilter"></div>
           <div class="table-wrap"><table id="subRevenuesTable"></table></div>
@@ -204,10 +207,4 @@
 <script src="db.js"></script>
 <script src="app.js"></script>
 <script src="app-students.js"></script>
-<script src="app-reports.js"></script>
-<script src="app-hr.js"></script>
-<script src="app-messages.js"></script>
-<script src="app-licenses.js"></script>
-<script src="app-settings.js"></script>
-</body>
-</html>
+<script src="app-repor

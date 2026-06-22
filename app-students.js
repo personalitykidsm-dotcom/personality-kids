@@ -1266,6 +1266,12 @@ function payInstallment(instId, studentId) {
           </div>
 
           <div class="form-group">
+            <label>بيان / ملاحظات</label>
+            <input type="text" id="payInstNote" placeholder="اختياري"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+
+          <div class="form-group">
             <label>إيصال / صورة الدفع</label>
             <input type="file" id="payReceipt" accept="image/*"
               style="display:block;width:100%;font-size:12px" onchange="previewPayReceipt(this)">
@@ -1345,16 +1351,25 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
-    // Core fields — confirmed to exist in Supabase installments schema
+    const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
+    const note      = document.getElementById('payInstNote')?.value?.trim() || '';
+
+    // Core + voucher/note/partialPaid — these columns are confirmed to exist
+    // in the Supabase installments schema (used the same way in
+    // registerPayment() in app-reports.js), so they go through the normal
+    // DB.update path and actually get persisted, not just cached locally.
     DB.update('installments', instId, {
-      status:   newStatus,
-      paidDate: date,
-      method
+      status:      newStatus,
+      paidDate:    date,
+      method,
+      partialPaid: newPartial,
+      voucherNo,
+      note
     });
     DB.update('students', studentId, { paid: Math.min(newPaid, student.net) });
 
     // Extra fields — update cache only (columns may not exist in Supabase)
-    const extras = { partialPaid: newPartial, payLink: link, receiptImg: receiptData || '', receiptName: file?.name || '', voucherNo: document.getElementById('payVoucherNo')?.value?.trim() || '' };
+    const extras = { payLink: link, receiptImg: receiptData || '', receiptName: file?.name || '' };
     const extSnake = {};
     for (const [k,v] of Object.entries(extras)) extSnake[TO_SNAKE[k]||k] = v;
     if (typeof CACHE !== 'undefined') {
