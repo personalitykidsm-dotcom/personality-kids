@@ -1895,3 +1895,4 @@ function printDailyReport() {
   w.document.close();
   setTimeout(()=>w.print(),500);
 }
+
