@@ -96,7 +96,8 @@ const TO_SNAKE = {
   minQty:'min_qty', idNo:'id_no', lastLogin:'last_login',
   partialPaid:'partial_paid', payLink:'pay_link',
   receiptImg:'receipt_img', receiptName:'receipt_name',
-  civilIdImg:'civil_id_img'
+  civilIdImg:'civil_id_img',
+  ibanImg:'iban_img'
 };
 const TO_CAMEL = Object.fromEntries(Object.entries(TO_SNAKE).map(([k,v])=>[v,k]));
 
@@ -147,7 +148,13 @@ const DB = {
         .then(rows=>{ CACHE[key]=rows||[]; return true; })
         .catch(()=> true)
       )
-      .catch(e=> { console.warn('add err:',e); return false; });
+      .catch(e=> {
+        // Rollback the optimistic cache entry so it doesn't linger until the
+        // next 10-second auto-refresh overwrites the cache from Supabase.
+        CACHE[key] = (CACHE[key]||[]).filter(r => r.id !== row.id);
+        console.warn('add err:',e);
+        return false;
+      });
   },
 
   // Insert multiple rows in a single request (avoids the post+refetch race

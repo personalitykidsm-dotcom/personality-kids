@@ -175,6 +175,16 @@ function openAddEmployee() {
           <div class="form-group"></div>
         </div>
         <div class="form-group">
+          <label>رقم IBAN</label>
+          <input type="text" id="eIban" placeholder="KW00XXXX0000000000000000000000" style="font-family:monospace;letter-spacing:1px">
+        </div>
+        <div class="form-group">
+          <label>مرفق IBAN (صورة)</label>
+          <input type="file" id="eIbanImg" accept="image/*"
+            style="display:block;width:100%;font-size:12px" onchange="previewEmpIban(this)">
+          <div id="eIbanImgPreview" style="margin-top:8px"></div>
+        </div>
+        <div class="form-group">
           <label>صورة البطاقة المدنية</label>
           <input type="file" id="eCivilIdImg" accept="image/*"
             style="display:block;width:100%;font-size:12px" onchange="previewEmpCivilId(this)">
@@ -187,6 +197,16 @@ function openAddEmployee() {
       </div>
     </div>
   </div>`;
+}
+
+function previewEmpIban(input) {
+  const prev = document.getElementById('eIbanImgPreview');
+  if (!input.files || !input.files[0]) { prev.innerHTML = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">`;
+  };
+  reader.readAsDataURL(input.files[0]);
 }
 
 function previewEmpCivilId(input) {
@@ -203,8 +223,9 @@ function saveEmployee() {
   const name = document.getElementById('eName').value.trim();
   if (!name) { showToast('⚠️ أدخل اسم الموظف'); return; }
   const civilIdFile = document.getElementById('eCivilIdImg')?.files?.[0];
+  const ibanImgFile = document.getElementById('eIbanImg')?.files?.[0];
 
-  const finishSave = async (civilIdImg) => {
+  const finishSave = async (civilIdImg, ibanImg) => {
     // DB.add() resolves false if the insert never actually reached Supabase
     // (RLS rejection, schema mismatch, network error, etc.) — it still pushes
     // optimistically into the local cache first, which is why the employee
@@ -223,6 +244,8 @@ function saveEmployee() {
       contractStart: document.getElementById('eStart').value,
       contractEnd:   document.getElementById('eEnd').value,
       contractType:  document.getElementById('eType').value,
+      iban:          document.getElementById('eIban').value.trim().toUpperCase(),
+      ibanImg:       ibanImg || '',
       civilIdImg:    civilIdImg || '',
       status:        'active'
     });
@@ -237,19 +260,124 @@ function saveEmployee() {
     showToast('✅ تم إضافة الموظف: ' + name);
   };
 
-  if (civilIdFile) {
-    const reader = new FileReader();
-    reader.onload = e => finishSave(e.target.result);
-    reader.readAsDataURL(civilIdFile);
-  } else {
-    finishSave('');
+  function readFile(file, cb) {
+    if (!file) { cb(''); return; }
+    const r = new FileReader();
+    r.onload = e => cb(e.target.result);
+    r.readAsDataURL(file);
   }
+
+  readFile(civilIdFile, civilIdImg => {
+    readFile(ibanImgFile, ibanImg => {
+      finishSave(civilIdImg, ibanImg);
+    });
+  });
 }
 
 function openEditEmployee(id) {
   const e = DB.all('employees').find(x => x.id === id);
   if (!e) return;
-  showToast('تعديل: ' + e.name + ' — قريباً');
+  const branchOpts = ['esh','sol','mat','esh_e','sol_e','mat_e'].map(b =>
+    `<option value="${b}" ${e.branch===b?'selected':''}>${BRANCHES[b].name}</option>`).join('');
+  const roleOpts = ROLES_HR.map(r => `<option ${e.role===r?'selected':''}>${r}</option>`).join('');
+  const typeOpts = ['دوام كامل','دوام جزئي','مؤقت','تجريبي'].map(t =>
+    `<option ${e.contractType===t?'selected':''}>${t}</option>`).join('');
+
+  document.getElementById('modals').innerHTML = `
+  <div id="modal-edit-emp" class="modal-overlay open">
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">✏️ تعديل موظف</div>
+        <button class="modal-close" onclick="closeModal('modal-edit-emp')">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>الاسم الكامل *</label><input type="text" id="eeNameEdit" value="${e.name||''}"></div>
+          <div class="form-group"><label>الجنسية</label><input type="text" id="eeNatEdit" value="${e.nationality||''}" placeholder="كويتي / مصري"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>الوظيفة *</label><select id="eeRoleEdit">${roleOpts}</select></div>
+          <div class="form-group"><label>الفرع *</label><select id="eeBranchEdit">${branchOpts}</select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>الهاتف</label><input type="tel" id="eePhoneEdit" value="${e.phone||''}" placeholder="965XXXXXXXX"></div>
+          <div class="form-group"><label>رقم الهوية</label><input type="text" id="eeIdNoEdit" value="${e.idNo||''}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>الراتب الأساسي (د.ك)</label><input type="number" id="eeSalaryEdit" step="0.001" value="${e.salary||0}"></div>
+          <div class="form-group"><label>البدلات (د.ك)</label><input type="number" id="eeAllowEdit" step="0.001" value="${e.allowance||0}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>بداية العقد</label><input type="date" id="eeStartEdit" value="${e.contractStart||''}"></div>
+          <div class="form-group"><label>نهاية العقد</label><input type="date" id="eeEndEdit" value="${e.contractEnd||''}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>نوع العقد</label><select id="eeTypeEdit">${typeOpts}</select></div>
+          <div class="form-group"></div>
+        </div>
+        <div class="form-group">
+          <label>رقم IBAN</label>
+          <input type="text" id="eeIbanEdit" value="${e.iban||''}" placeholder="KW00XXXX0000000000000000000000" style="font-family:monospace;letter-spacing:1px">
+        </div>
+        <div class="form-group">
+          <label>مرفق IBAN (صورة)</label>
+          <input type="file" id="eeIbanImgEdit" accept="image/*"
+            style="display:block;width:100%;font-size:12px" onchange="previewEmpIbanEdit(this)">
+          <div id="eeIbanImgEditPreview" style="margin-top:8px">
+            ${e.ibanImg ? `<img src="${e.ibanImg}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('modal-edit-emp')">إلغاء</button>
+        <button class="btn btn-primary" onclick="updateEmployee('${id}')">💾 حفظ التعديلات</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function previewEmpIbanEdit(input) {
+  const prev = document.getElementById('eeIbanImgEditPreview');
+  if (!input.files || !input.files[0]) { prev.innerHTML = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    prev.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--border)">`;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function updateEmployee(id) {
+  const name = document.getElementById('eeNameEdit').value.trim();
+  if (!name) { showToast('⚠️ أدخل اسم الموظف'); return; }
+  const ibanImgFile = document.getElementById('eeIbanImgEdit')?.files?.[0];
+  const e = DB.all('employees').find(x => x.id === id);
+
+  const doUpdate = (ibanImg) => {
+    DB.update('employees', id, {
+      name,
+      nationality:   document.getElementById('eeNatEdit').value.trim(),
+      role:          document.getElementById('eeRoleEdit').value,
+      branch:        document.getElementById('eeBranchEdit').value,
+      phone:         document.getElementById('eePhoneEdit').value.trim(),
+      idNo:          document.getElementById('eeIdNoEdit').value.trim(),
+      salary:        parseFloat(document.getElementById('eeSalaryEdit').value)||0,
+      allowance:     parseFloat(document.getElementById('eeAllowEdit').value)||0,
+      contractStart: document.getElementById('eeStartEdit').value,
+      contractEnd:   document.getElementById('eeEndEdit').value,
+      contractType:  document.getElementById('eeTypeEdit').value,
+      iban:          document.getElementById('eeIbanEdit').value.trim().toUpperCase(),
+      ibanImg:       ibanImg,
+    });
+    closeModal('modal-edit-emp');
+    renderHRTable('all');
+    showToast('✅ تم تحديث بيانات الموظف');
+  };
+
+  if (ibanImgFile) {
+    const reader = new FileReader();
+    reader.onload = ev => doUpdate(ev.target.result);
+    reader.readAsDataURL(ibanImgFile);
+  } else {
+    doUpdate(e?.ibanImg || '');
+  }
 }
 
 // ===== LEAVES =====
@@ -417,6 +545,7 @@ function exportHRExcel() {
     'الهاتف': e.phone||'', 'الراتب': e.salary, 'البدلات': e.allowance,
     'الصافي': (e.salary||0)+(e.allowance||0),
     'بداية العقد': fmtDate(e.contractStart), 'نهاية العقد': fmtDate(e.contractEnd),
+    'رقم IBAN': e.iban||'',
     'الحالة': empStatus(e).label
   }));
   xlsxExport(data, 'تقرير_الموظفين');

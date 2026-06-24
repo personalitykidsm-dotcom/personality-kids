@@ -1254,9 +1254,10 @@ function payInstallment(instId, studentId) {
           </div>
 
           <div class="form-group">
-            <label>تاريخ الدفع</label>
-            <input type="date" id="payDate" value="${new Date().toISOString().split('T')[0]}"
-              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+            <label>تاريخ الدفع <span style="color:var(--danger)">*</span></label>
+            <input type="date" id="payDate"
+              style="padding:9px 12px;border:2px solid var(--danger);border-radius:8px;width:100%"
+              oninput="this.style.borderColor=this.value?'var(--border)':'var(--danger)'">
           </div>
 
           <div class="form-group">
@@ -1325,6 +1326,13 @@ function confirmPay(instId, studentId) {
   const isPartial = document.querySelector('#modal-pay .pay-chip.selected')?.textContent.includes('جزئي') ||
                     document.getElementById('partialAmtGroup')?.style.display !== 'none';
 
+  if (!date) {
+    showToast('⚠️ يجب إدخال تاريخ الدفع');
+    const dateEl = document.querySelector('#modal-pay #payDate');
+    if (dateEl) { dateEl.focus(); dateEl.style.borderColor = 'var(--danger)'; }
+    return;
+  }
+
   const inst    = DB.all('installments').find(i => i.id === instId);
   const student = DB.all('students').find(s => s.id === studentId);
   if (!inst || !student) return;
@@ -1351,8 +1359,8 @@ function confirmPay(instId, studentId) {
       newStatus = 'paid';
     }
 
-    const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
-    const note      = document.getElementById('payInstNote')?.value?.trim() || '';
+    const voucherNo = document.querySelector('#modal-pay #payVoucherNo')?.value?.trim() || '';
+    const note      = document.querySelector('#modal-pay #payInstNote')?.value?.trim() || '';
 
     // Core + voucher/note/partialPaid — these columns are confirmed to exist
     // in the Supabase installments schema (used the same way in

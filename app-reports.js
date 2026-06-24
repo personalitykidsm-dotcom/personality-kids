@@ -42,8 +42,8 @@ function renderFees() {
           <div class="form-group"><label>المبلغ (د.ك)</label>
             <input type="number" id="payAmt" step="0.001" placeholder="0.000">
           </div>
-          <div class="form-group"><label>تاريخ الدفع</label>
-            <input type="date" id="payDate" value="${new Date().toISOString().split('T')[0]}">
+          <div class="form-group"><label>تاريخ الدفع <span style="color:var(--danger)">*</span></label>
+            <input type="date" id="payDate" placeholder="أدخل تاريخ الدفع" style="border:2px solid var(--danger);border-radius:8px;padding:9px 12px;width:100%" oninput="this.style.borderColor=this.value?'var(--border)':'var(--danger)'">
           </div>
           <div class="form-group"><label>طريقة الدفع</label>
             <div class="pay-method" id="payMethodChips">
@@ -192,6 +192,7 @@ function registerPayment() {
   const method = document.querySelector('#fees-pay #payMethodChips .pay-chip.selected')?.textContent.trim() || 'نقدي';
 
   if (!sid) { showToast('⚠️ اختر الطالب'); return; }
+  if (!date) { showToast('⚠️ يجب إدخال تاريخ الدفع'); document.getElementById('payDate').focus(); return; }
   if (!amt || amt <= 0) { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
 
   const _s = DB.all('students').find(x => x.id === sid);
@@ -218,8 +219,10 @@ function registerPayment() {
       if (inst) {
         const newPartial = (inst.partialPaid || 0) + amt;
         const newStatus = newPartial >= inst.amount ? 'paid' : 'partial';
-        const note = document.getElementById('payNote')?.value?.trim() || '';
-        const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
+        // Scoped to #fees-pay — same reason as #payMethodChips above:
+        // app-students.js has the same IDs and its page stays in the DOM.
+        const note = document.querySelector('#fees-pay #payNote')?.value?.trim() || '';
+        const voucherNo = document.querySelector('#fees-pay #payVoucherNo')?.value?.trim() || '';
         const updates = { status: newStatus, paidDate: date, method, partialPaid: newPartial, note, voucherNo };
         if (receiptData) updates.receipt = receiptData;
         DB.update('installments', instId, updates);
@@ -227,8 +230,8 @@ function registerPayment() {
     } else {
       // no installment selected — create a new payment record
       const newInstId = DB.nextId('installments','I');
-      const note = document.getElementById('payNote')?.value?.trim() || '';
-      const voucherNo = document.getElementById('payVoucherNo')?.value?.trim() || '';
+      const note = document.querySelector('#fees-pay #payNote')?.value?.trim() || '';
+      const voucherNo = document.querySelector('#fees-pay #payVoucherNo')?.value?.trim() || '';
       const rec = {
         id: newInstId, studentId: sid,
         num: DB.all('installments').filter(i=>i.studentId===sid).length + 1,
@@ -1791,6 +1794,11 @@ function renderDailyReport() {
   });
   const totalSub = subRevs.reduce(function(s,r){ return s + (parseFloat(r.amount)||0); }, 0);
 
+  const groceryCash = subRevs.filter(function(r) {
+    const m = (r.method || 'نقدي').toString().replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim();
+    return (r.type || '').includes('بقالة') && !m.includes('برنامج') && !m.includes('كي نت') && !m.includes('رابط');
+  }).reduce(function(s,r){ return s + (parseFloat(r.amount)||0); }, 0);
+
   const total = totals['نقدي'] + totals['برنامج'] + totals['كي نت'] + totals['رابط'];
 
   let rowsHtml = '';
@@ -1835,7 +1843,8 @@ function renderDailyReport() {
 
     html += '<div style="display:flex;justify-content:space-between;margin-top:20px;gap:16px;flex-wrap:wrap">';
     html += '<table style="border-collapse:collapse;font-size:13px;min-width:200px">';
-    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد نقداً</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">' + fmtKD(totals['نقدي']) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد نقداً</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">' + fmtKD(totals['نقدي'] - groceryCash) + '</td></tr>';
+    html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">إيراد البقالة النقدي</td><td style="border:1px solid #ccc;padding:6px 12px;min-width:80px">' + fmtKD(groceryCash) + '</td><td style="border:1px solid #ccc;padding:6px 12px">اسم المستلم</td><td style="border:1px solid #ccc;padding:6px 60px"></td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد رابط</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['رابط']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد كي نت</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['كي نت']) + '</td></tr>';
     html += '<tr><td style="border:1px solid #ccc;padding:6px 12px">الإيراد برنامج</td><td style="border:1px solid #ccc;padding:6px 12px">' + fmtKD(totals['برنامج']) + '</td></tr>';
@@ -1857,9 +1866,11 @@ function renderDailyReport() {
     html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
     html += '<thead><tr style="background:#1a5c42;color:#fff">';
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">م</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px">الاسم</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">الفرع</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">النوع</th>';
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">طريقة الدفع</th>';
+    html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">رقم السند</th>';
     html += '<th style="border:1px solid #ccc;padding:6px">الوصف</th>';
     html += '<th style="border:1px solid #ccc;padding:6px;text-align:center">المبلغ</th>';
     html += '</tr></thead><tbody>';
@@ -1867,9 +1878,11 @@ function renderDailyReport() {
       var bname = (typeof BRANCHES !== 'undefined' && BRANCHES[r.branch]) ? BRANCHES[r.branch].name : (r.branch || '—');
       html += '<tr>';
       html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (idx+1) + '</td>';
+      html += '<td style="border:1px solid #ccc;padding:5px">' + (r.name || '—') + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + bname + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + (r.type || '—') + '</td>';
       html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (r.method || 'نقدي') + '</td>';
+      html += '<td style="text-align:center;border:1px solid #ccc;padding:5px">' + (r.voucherNo || '—') + '</td>';
       html += '<td style="border:1px solid #ccc;padding:5px">' + (r.description || '—') + '</td>';
       html += '<td style="text-align:center;border:1px solid #ccc;padding:5px;font-weight:bold">' + fmtKD(parseFloat(r.amount||0)) + '</td>';
       html += '</tr>';

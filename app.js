@@ -305,35 +305,176 @@ function renderDashboard() {
     <tbody>${rows}</tbody>`;
 
   // Alerts
-  const alerts = [];
-  if (lateInst.length)
-    alerts.push(`<div class="alert alert-danger">⚠️ <div><b>${lateInst.length} قسط</b> متأخر عن موعد السداد</div></div>`);
+  const _userIsAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
+  const _userBranch  = currentUser?.branch;
 
-  licenses.forEach(l => {
-    const d = daysUntil(l.expiryDate);
-    if (d < 0)
-      alerts.push(`<div class="alert alert-danger">📜 ترخيص <b>${l.name}</b> منتهي منذ ${Math.abs(d)} يوم</div>`);
-    else if (d < 60)
-      alerts.push(`<div class="alert alert-warning">📜 ترخيص <b>${l.name}</b> ينتهي خلال <b>${d} يوم</b></div>`);
-  });
-
-  const expiring = DB.all('supplies').filter(p => daysUntil(p.expiryDate) < 30 && daysUntil(p.expiryDate) >= 0);
-  if (expiring.length)
-    alerts.push(`<div class="alert alert-warning">📦 <b>${expiring.length} أصناف</b> في المستهلكات تنتهي صلاحيتها قريباً</div>`);
-
-  // Evening subscriptions expiring within 5 days
-  const expiringSubscriptions = getExpiringSubscriptions(5);
-  if (expiringSubscriptions.length) {
-    const names = expiringSubscriptions.map(s => `<b>${s.name}</b> (${daysUntil(s.subscriptionEnd)} يوم)`).join('، ');
-    alerts.push(`<div class="alert alert-warning">🌙 اشتراكات المسائي تنتهي قريباً: ${names}
-      <button class="btn btn-outline btn-sm" style="margin-right:8px" onclick="setBranchFilter('esh_e',document.querySelector('[onclick*=esh_e]'));showPage('students')">عرض</button>
-    </div>`);
+  // helper: render a badge-style tag
+  function _tag(txt, color) {
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}44">${txt}</span>`;
+  }
+  // helper: branch pill
+  function _bpill(b) {
+    return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;background:var(--border);color:var(--text-muted)">${BRANCHES[b]?.name || b}</span>`;
   }
 
-  if (!alerts.length)
-    alerts.push(`<div class="alert alert-success">✅ لا توجد تنبيهات عاجلة</div>`);
+  let alertsHtml = '';
 
-  document.getElementById('alertsContainer').innerHTML = alerts.join('');
+  // ── 1. Late installments ──────────────────────────────────────
+  if (lateInst.length) {
+    let body = '';
+    if (_userIsAdmin) {
+      const allSt = DB.all('students');
+      const byBranch = {};
+      lateInst.forEach(i => {
+        const st = allSt.find(x => x.id === i.studentId);
+        const b  = st?.branch || '—';
+        if (!byBranch[b]) byBranch[b] = [];
+        byBranch[b].push(st);
+      });
+      body = Object.entries(byBranch).map(([b, sts], bi) => {
+        const detailId = 'late-detail-' + bi;
+        const rows = sts.map(st => `<div style="font-size:12px;padding:2px 8px">${st?.name || '—'}</div>`).join('');
+        return `<div style="margin-bottom:4px">
+          <div onclick="(function(el){var d=document.getElementById('${detailId}');d.style.display=d.style.display==='none'?'block':'none';el.querySelector('.arr').textContent=d.style.display==='none'?'▶':'▼'})(this)"
+            style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#fed7d733;border-radius:6px;cursor:pointer;user-select:none">
+            <span style="font-size:13px;font-weight:600">${BRANCHES[b]?.name || b}</span>
+            <span style="display:flex;align-items:center;gap:8px">${_tag(sts.length + ' قسط', '#e53e3e')}<span class="arr" style="font-size:11px;color:#e53e3e">▶</span></span>
+          </div>
+          <div id="${detailId}" style="display:none;border:1px solid #fed7d766;border-radius:0 0 6px 6px;padding:4px 0">${rows}</div>
+        </div>`;
+      }).join('');
+    } else {
+      const _allSt2 = DB.all('students');
+      const _lateRows = lateInst.map(i => {
+        const st2 = _allSt2.find(x => x.id === i.studentId);
+        return `<div style="font-size:12px;padding:2px 8px">${st2?.name || '—'}</div>`;
+      }).join('');
+      body = `<div style="margin-bottom:4px">
+        <div onclick="(function(el){var d=document.getElementById('late-detail-br');d.style.display=d.style.display==='none'?'block':'none';el.querySelector('.arr').textContent=d.style.display==='none'?'▶':'▼'})(this)"
+          style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#fed7d733;border-radius:6px;cursor:pointer;user-select:none">
+          <span style="font-size:13px;font-weight:600">${BRANCHES[_userBranch]?.name || _userBranch}</span>
+          <span style="display:flex;align-items:center;gap:8px">${_tag(lateInst.length + ' قسط', '#e53e3e')}<span class="arr" style="font-size:11px;color:#e53e3e">▶</span></span>
+        </div>
+        <div id="late-detail-br" style="display:none;border:1px solid #fed7d766;border-radius:0 0 6px 6px;padding:4px 0">${_lateRows}</div>
+      </div>`;
+    }
+    alertsHtml += `
+      <div class="alert alert-danger" style="padding:10px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:15px">⚠️</span>
+          <b>${lateInst.length} قسط متأخر عن موعد السداد</b>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // ── 2. Licenses ───────────────────────────────────────────────
+  const _visLicenses = _userIsAdmin
+    ? licenses
+    : licenses.filter(l => l.branch === _userBranch || l.branch === 'all' || !l.branch);
+  const _licAlerts = _visLicenses.filter(l => daysUntil(l.expiryDate) < 60);
+  if (_licAlerts.length) {
+    const rows = _licAlerts.map(l => {
+      const d = daysUntil(l.expiryDate);
+      const statusTag = d < 0
+        ? _tag('منتهي منذ ' + Math.abs(d) + ' يوم', '#e53e3e')
+        : _tag('ينتهي خلال ' + d + ' يوم', '#d97706');
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #d9770622;flex-wrap:wrap;gap:4px">
+        <span style="font-size:13px">📜 <b>${l.name}</b> ${_userIsAdmin ? _bpill(l.branch) : ''}</span>
+        ${statusTag}
+      </div>`;
+    }).join('');
+    alertsHtml += `
+      <div class="alert ${_licAlerts.some(l=>daysUntil(l.expiryDate)<0)?'alert-danger':'alert-warning'}" style="padding:10px 14px">
+        <div style="font-weight:600;margin-bottom:8px">📜 تراخيص تحتاج متابعة</div>
+        ${rows}
+      </div>`;
+  }
+
+  // ── 3. Supplies ───────────────────────────────────────────────
+  const _allSupplies = DB.all('supplies');
+  const _visSupplies = _userIsAdmin ? _allSupplies : _allSupplies.filter(p => p.branch === _userBranch);
+  const expiring = _visSupplies.filter(p => daysUntil(p.expiryDate) < 30 && daysUntil(p.expiryDate) >= 0);
+  if (expiring.length) {
+    let body = '';
+    if (_userIsAdmin) {
+      const byBranch = {};
+      expiring.forEach(p => { byBranch[p.branch] = (byBranch[p.branch] || 0) + 1; });
+      body = Object.entries(byBranch)
+        .map(([b, c]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #d9770622">
+          <span style="font-size:13px">${BRANCHES[b]?.name || b}</span>
+          ${_tag(c + ' صنف', '#d97706')}
+        </div>`).join('');
+    }
+    alertsHtml += `
+      <div class="alert alert-warning" style="padding:10px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${_userIsAdmin ? '8px' : '0'}">
+          <span>📦</span><b>${expiring.length} أصناف مستهلكات تنتهي صلاحيتها قريباً</b>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // ── 4. Evening subscriptions ──────────────────────────────────
+  const _allExpSubs = getExpiringSubscriptions(5);
+  const _visSubs = _userIsAdmin ? _allExpSubs : _allExpSubs.filter(s => s.branch === _userBranch);
+  if (_visSubs.length) {
+    let body = '';
+    if (_userIsAdmin) {
+      const byBranch = {};
+      _visSubs.forEach(s => {
+        if (!byBranch[s.branch]) byBranch[s.branch] = [];
+        byBranch[s.branch].push(s);
+      });
+      body = Object.entries(byBranch).map(([b, subs], bi) => {
+        const detailId = 'sub-detail-' + bi;
+        const rows = subs.map(s => {
+          const d = daysUntil(s.subscriptionEnd);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 8px">
+            <span style="font-size:12px">${s.name}</span>
+            ${_tag(d + ' يوم', d <= 1 ? '#e53e3e' : '#d97706')}
+          </div>`;
+        }).join('');
+        return `<div style="margin-bottom:4px">
+          <div onclick="(function(el){var d=document.getElementById('${detailId}');d.style.display=d.style.display==='none'?'block':'none';el.querySelector('.arr').textContent=d.style.display==='none'?'▶':'▼'})(this)"
+            style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#f6ad5533;border-radius:6px;cursor:pointer;user-select:none">
+            <span style="font-size:13px;font-weight:600">${BRANCHES[b]?.name || b}</span>
+            <span style="display:flex;align-items:center;gap:8px">${_tag(subs.length + ' طالب', '#d97706')}<span class="arr" style="font-size:11px;color:#d97706">▶</span></span>
+          </div>
+          <div id="${detailId}" style="display:none;border:1px solid #f6ad5544;border-radius:0 0 6px 6px;padding:4px 0">${rows}</div>
+        </div>`;
+      }).join('');
+    } else {
+      const _subRows = _visSubs.map(s => {
+        const d = daysUntil(s.subscriptionEnd);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 8px">
+          <span style="font-size:12px">${s.name}</span>
+          ${_tag(d + ' يوم', d <= 1 ? '#e53e3e' : '#d97706')}
+        </div>`;
+      }).join('');
+      body = `<div style="margin-bottom:4px">
+        <div onclick="(function(el){var d=document.getElementById('sub-detail-br');d.style.display=d.style.display==='none'?'block':'none';el.querySelector('.arr').textContent=d.style.display==='none'?'▶':'▼'})(this)"
+          style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#f6ad5533;border-radius:6px;cursor:pointer;user-select:none">
+          <span style="font-size:13px;font-weight:600">${BRANCHES[_userBranch]?.name || _userBranch}</span>
+          <span style="display:flex;align-items:center;gap:8px">${_tag(_visSubs.length + ' طالب', '#d97706')}<span class="arr" style="font-size:11px;color:#d97706">▶</span></span>
+        </div>
+        <div id="sub-detail-br" style="display:none;border:1px solid #f6ad5544;border-radius:0 0 6px 6px;padding:4px 0">${_subRows}</div>
+      </div>`;
+    }
+    alertsHtml += `
+      <div class="alert alert-warning" style="padding:10px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b>🌙 اشتراكات المسائي تنتهي قريباً (${_visSubs.length})</b>
+          ${!_userIsAdmin ? `<button class="btn btn-outline btn-sm" onclick="setBranchFilter('${_userBranch}',document.querySelector('[onclick*=${_userBranch}]'));showPage('students')">عرض</button>` : ''}
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  if (!alertsHtml)
+    alertsHtml = `<div class="alert alert-success">✅ لا توجد تنبيهات عاجلة</div>`;
+
+  document.getElementById('alertsContainer').innerHTML = alertsHtml;
 }
 
 // ============================================================
@@ -706,7 +847,7 @@ function renderSubRevenues() {
   if (tableEl) {
     tableEl.innerHTML = `
       <thead><tr>
-        <th>التاريخ</th><th>الاسم</th><th>الفرع</th><th>النوع</th><th>طريقة الدفع</th><th>الوصف</th><th>المبلغ (د.ك)</th><th></th>
+        <th>التاريخ</th><th>الاسم</th><th>الفرع</th><th>النوع</th><th>طريقة الدفع</th><th>رقم السند</th><th>الوصف</th><th>المبلغ (د.ك)</th><th></th>
       </tr></thead>
       <tbody>
         ${rows.length ? rows.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(r=>`
@@ -716,11 +857,12 @@ function renderSubRevenues() {
             <td><span class="badge ${BRANCHES[r.branch]?.badge||'badge-gray'}">${BRANCHES[r.branch]?.name||r.branch||'—'}</span></td>
             <td>${r.type||'—'}</td>
             <td>${r.method||'نقدي'}</td>
+            <td>${r.voucherNo||'—'}</td>
             <td style="font-size:12px">${r.description||''}</td>
             <td><b>${parseFloat(r.amount||0).toFixed(3)}</b></td>
             <td><button class="btn btn-outline btn-sm" onclick="deleteSubRevenue('${r.id}')">🗑️</button></td>
           </tr>`).join('')
-        : '<tr><td colspan="8" style="text-align:center;color:#999">لا توجد إيرادات</td></tr>'}
+        : '<tr><td colspan="9" style="text-align:center;color:#999">لا توجد إيرادات</td></tr>'}
       </tbody>`;
   }
 
@@ -774,8 +916,8 @@ function openAddSubRevenue() {
             <div class="form-group"><label>الاسم</label>
               <input type="text" id="srName" placeholder="اسم الشخص...">
             </div>
-            <div class="form-group"><label>التاريخ</label>
-              <input type="date" id="srDate" value="${new Date().toISOString().split('T')[0]}">
+            <div class="form-group"><label>التاريخ <span style="color:var(--danger)">*</span></label>
+              <input type="date" id="srDate" style="border:2px solid var(--danger);border-radius:8px;padding:9px 12px;width:100%" oninput="this.style.borderColor=this.value?'var(--border)':'var(--danger)'">
             </div>
           </div>
           <div class="form-row">
@@ -801,6 +943,9 @@ function openAddSubRevenue() {
               <div class="pay-chip" onclick="selSubRevPay(this)">🔗 رابط</div>
             </div>
           </div>
+          <div class="form-group"><label>رقم السند</label>
+            <input type="text" id="srVoucherNo" placeholder="اختياري...">
+          </div>
           <div class="form-group"><label>الوصف / ملاحظات</label>
             <input type="text" id="srDesc" placeholder="اكتب وصفاً للإيراد...">
           </div>
@@ -819,19 +964,21 @@ function selSubRevPay(el) {
   el.classList.add('selected');
 }
 
-function saveSubRevenue() {
+async function saveSubRevenue() {
   const name   = document.getElementById('srName')?.value?.trim() || '';
   const date   = document.getElementById('srDate')?.value;
   const branch = document.getElementById('srBranch')?.value;
   const type   = document.getElementById('srType')?.value;
   const amount = parseFloat(document.getElementById('srAmount')?.value) || 0;
-  const method = document.querySelector('#srPayChips .pay-chip.selected')?.textContent?.replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim() || 'نقدي';
-  const desc   = document.getElementById('srDesc')?.value?.trim() || '';
+  const method    = document.querySelector('#srPayChips .pay-chip.selected')?.textContent?.replace('💵 ','').replace('📱 ','').replace('💳 ','').replace('🔗 ','').trim() || 'نقدي';
+  const voucherNo = document.getElementById('srVoucherNo')?.value?.trim() || '';
+  const desc      = document.getElementById('srDesc')?.value?.trim() || '';
 
-  if (!date || !branch) { showToast('⚠️ أدخل التاريخ والفرع'); return; }
-  if (amount <= 0)       { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
+  if (!date) { showToast('⚠️ يجب إدخال التاريخ'); const el=document.getElementById('srDate'); if(el){el.focus();el.style.borderColor='var(--danger)';} return; }
+  if (!branch) { showToast('⚠️ اختر الفرع'); return; }
+  if (amount <= 0) { showToast('⚠️ أدخل مبلغاً صحيحاً'); return; }
 
-  DB.add('subRevenues', {
+  const ok = await DB.add('subRevenues', {
     id:          DB.nextId('subRevenues', 'SR'),
     name,
     date,
@@ -839,8 +986,15 @@ function saveSubRevenue() {
     type,
     amount,
     method,
+    voucherNo,
     description: desc
   });
+
+  if (!ok) {
+    showToast('❌ فشل الحفظ — افتح F12 ⟶ Console وشوف رسالة الخطأ، أو راجع صلاحيات جدول sub_revenues في Supabase');
+    return; // keep modal open so data is not lost
+  }
+
   document.getElementById('modal-add-subrevenue')?.remove();
   showToast('✅ تم إضافة الإيراد');
   renderSubRevenues();
