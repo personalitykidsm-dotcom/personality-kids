@@ -453,23 +453,30 @@ function applyContractDiscount(prefix) {
   const discEl  = document.getElementById(prefix==='s' ? 'sDiscount' : 'esDiscount');
 
   const fees = parseFloat(feesEl?.value) || 0;
-  let discAmt = 0;
-  let isGoldDisc = false;
+  let discAmtGold = 0;
+  let discAmtOther = 0;
   const discCont = document.getElementById(prefix + 'ContractDiscount');
   const checkedBoxes = discCont ? [...discCont.querySelectorAll('input[type=checkbox]:checked')] : [];
   checkedBoxes.forEach(cb => {
     const d = bd.discounts[parseInt(cb.value)];
     if (d) {
-      discAmt += d.type === 'percent' ? fees * (parseFloat(d.value)||0) / 100 : (parseFloat(d.value)||0);
-      if (/ذهب|بطاق.*ذهب|gold/i.test(d.name)) isGoldDisc = true;
+      const amt = d.type === 'percent' ? fees * (parseFloat(d.value)||0) / 100 : (parseFloat(d.value)||0);
+      if (/ذهب|بطاق.*ذهب|gold/i.test(d.name)) {
+        discAmtGold += amt;
+      } else {
+        discAmtOther += amt;
+      }
     }
   });
+  const discAmt = discAmtGold + discAmtOther;
   if (discEl) discEl.value = discAmt.toFixed(3);
 
-  // store active discount info for buildInstRows to use
+  // store active discount info for buildInstRows to use (separated by type)
   window._activeDiscount = {
-    amount: discAmt,
-    isGold: isGoldDisc
+    amount:      discAmt,
+    goldAmount:  discAmtGold,
+    otherAmount: discAmtOther,
+    isGold:      discAmtGold > 0
   };
 
   // load installment plan from the selected category, if any
@@ -514,12 +521,15 @@ function buildInstRows() {
     const startVal  = document.getElementById('instStart').value;
     const months    = parseInt(document.getElementById('instInterval').value) || 1;
 
-    // Apply discount to first (gold card) or last (all others) installment
-    const _disc    = window._activeDiscount || { amount: 0, isGold: false };
+    // Apply discounts: gold card → first installment, others → last installment
+    const _disc    = window._activeDiscount || { amount: 0, goldAmount: 0, otherAmount: 0, isGold: false };
     const planAmts = window._contractPlanRows.map(r => parseFloat(r.amount) || 0);
-    if (_disc.amount > 0) {
-      const idx = _disc.isGold ? 0 : planAmts.length - 1;
-      planAmts[idx] = Math.max(0, parseFloat((planAmts[idx] - _disc.amount).toFixed(3)));
+    if (_disc.goldAmount > 0) {
+      planAmts[0] = Math.max(0, parseFloat((planAmts[0] - _disc.goldAmount).toFixed(3)));
+    }
+    if (_disc.otherAmount > 0) {
+      const lastIdx = planAmts.length - 1;
+      planAmts[lastIdx] = Math.max(0, parseFloat((planAmts[lastIdx] - _disc.otherAmount).toFixed(3)));
     }
 
     let rows = '';
