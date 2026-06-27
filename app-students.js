@@ -1331,7 +1331,7 @@ function confirmPay(instId, studentId) {
   // "نقدي" chip instead of whatever the user picked in this modal.
   const methodEl  = document.querySelector('#modal-pay #payMethodChips .pay-chip.selected');
   const method    = methodEl ? methodEl.textContent.trim() : 'نقدي';
-  const date      = document.getElementById('payDate').value;
+  const date      = document.querySelector('#modal-pay #payDate')?.value || '';
   const link      = document.getElementById('payLink')?.value?.trim() || '';
   const isPartial = document.querySelector('#modal-pay .pay-chip.selected')?.textContent.includes('جزئي') ||
                     document.getElementById('partialAmtGroup')?.style.display !== 'none';
