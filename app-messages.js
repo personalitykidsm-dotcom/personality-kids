@@ -70,6 +70,16 @@ function renderMessages() {
         <div id="msgMediaPreview" class="media-preview"></div>
       </div>
 
+      <div class="form-group" style="margin-bottom:10px">
+        <label style="margin-bottom:4px">📱 الرقم المرسل (مشرف الفرع)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="msgSenderNumber" class="form-control" placeholder="965XXXXXXXX"
+            style="flex:1" oninput="updateSenderDisplay()">
+          <button class="btn btn-outline btn-sm" onclick="loadBranchSenderNumber()" title="تحميل رقم الفرع المحدد">🔄 تحميل</button>
+        </div>
+        <div id="msgSenderInfo" style="font-size:11px;color:var(--text-muted);margin-top:3px"></div>
+      </div>
+
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn btn-outline btn-sm" onclick="selectAllMsg(true)">✅ تحديد الكل</button>
         <button class="btn btn-outline btn-sm" onclick="selectAllMsg(false)">☐ إلغاء الكل</button>
@@ -95,6 +105,8 @@ function renderMessages() {
     </div>`;
 
   renderMsgContacts(students);
+  // تحميل رقم الفرع الافتراضي بعد رسم الصفحة
+  setTimeout(loadBranchSenderNumber, 50);
 }
 
 function renderMsgContacts(list) {
@@ -114,15 +126,6 @@ function renderMsgContacts(list) {
   }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted)">لا توجد جهات اتصال</div>';
 
   document.getElementById('contactBadge').textContent = list.length;
-}
-
-function filterMsgContacts() {
-  const branch = document.getElementById('msgBranch').value;
-  const grade  = document.getElementById('msgGrade').value;
-  let list = DB.all('students');
-  if (branch !== 'all') list = list.filter(s => s.branch === branch);
-  if (grade  !== 'all') list = list.filter(s => s.grade  === grade);
-  renderMsgContacts(list);
 }
 
 function toggleMsgContact(id, row) {
@@ -179,30 +182,107 @@ function previewMsgMedia(input) {
   input.value = '';
 }
 
-function sendBulkMsg() {
-  const msg     = document.getElementById('msgText').value.trim();
-  const checked = document.querySelectorAll('#msgContactsList input[type=checkbox]:checked');
-  if (!msg)           { showToast('⚠️ اكتب نص الرسالة أولاً'); return; }
-  if (!checked.length){ showToast('⚠️ حدد مستلماً واحداً على الأقل'); return; }
+function loadBranchSenderNumber() {
+  const branchEl = document.getElementById('msgBranch');
+  const branch   = branchEl ? branchEl.value : 'all';
+  const s        = DB.get('nurserySettings') || {};
+  const branchWa = s.branchWaNumbers || {};
+  const senderEl = document.getElementById('msgSenderNumber');
+  const infoEl   = document.getElementById('msgSenderInfo');
+  if (!senderEl) return;
 
-  const total = checked.length;
+  // حاول رقم الفرع المحدد، ثم رقم المشرف الحالي، ثم الرقم الرئيسي
+  let num = '';
+  let label = '';
+  if (branch !== 'all' && branchWa[branch]) {
+    num   = branchWa[branch];
+    label = `رقم فرع ${BRANCHES[branch]?.name || branch}`;
+  } else if (currentUser?.branch && currentUser.branch !== 'all' && branchWa[currentUser.branch]) {
+    num   = branchWa[currentUser.branch];
+    label = `رقم فرعك (${BRANCHES[currentUser.branch]?.name || currentUser.branch})`;
+  } else if (s.waNumber) {
+    num   = s.waNumber;
+    label = 'الرقم الرئيسي للروضة';
+  }
+
+  senderEl.value = num;
+  if (infoEl) infoEl.textContent = label ? `📍 ${label}` : 'لم يُضبط رقم — أدخله يدوياً أو احفظه في الإعدادات';
+}
+
+function updateSenderDisplay() {
+  const infoEl = document.getElementById('msgSenderInfo');
+  if (infoEl) infoEl.textContent = '✏️ رقم مخصص';
+}
+
+function filterMsgContacts() {
+  const branch = document.getElementById('msgBranch').value;
+  const grade  = document.getElementById('msgGrade').value;
+  let list = DB.all('students');
+  if (branch !== 'all') list = list.filter(s => s.branch === branch);
+  if (grade  !== 'all') list = list.filter(s => s.grade  === grade);
+  renderMsgContacts(list);
+  loadBranchSenderNumber();
+}
+
+function sendBulkMsg() {
+  const msg        = document.getElementById('msgText').value.trim();
+  const senderNum  = (document.getElementById('msgSenderNumber')?.value || '').replace(/\D/g,'');
+  const checked    = document.querySelectorAll('#msgContactsList input[type=checkbox]:checked');
+
+  if (!msg)            { showToast('⚠️ اكتب نص الرسالة أولاً'); return; }
+  if (!checked.length) { showToast('⚠️ حدد مستلماً واحداً على الأقل'); return; }
+  if (!senderNum)      { showToast('⚠️ أدخل رقم واتساب المرسل أولاً'); return; }
+
+  // جمع أرقام المستلمين
+  const students = DB.all('students');
+  const phones = [];
+  checked.forEach(chk => {
+    const sid = chk.id.replace('msgChk','');
+    const st  = students.find(s => s.id === sid);
+    if (!st) return;
+    [st.phone1, st.phone2].forEach(p => {
+      if (p) {
+        const clean = p.replace(/\D/g,'');
+        if (clean && !phones.includes(clean)) phones.push(clean);
+      }
+    });
+  });
+
+  if (!phones.length) { showToast('⚠️ لا توجد أرقام هاتف للمستلمين المحددين'); return; }
+
+  const total = phones.length;
   const wrap  = document.getElementById('msgProgressWrap');
   const bar   = document.getElementById('msgBar');
   const txt   = document.getElementById('msgProgressText');
   wrap.style.display = 'block';
+  bar.style.width    = '0%';
+
+  const encodedMsg = encodeURIComponent(msg);
   let done = 0;
 
-  const timer = setInterval(() => {
+  function sendNext() {
+    if (done >= total) {
+      txt.textContent = `✅ تم فتح ${total} محادثة واتساب`;
+      showToast(`✅ تم فتح ${total} محادثة واتساب`);
+      setTimeout(() => { wrap.style.display='none'; bar.style.width='0%'; }, 5000);
+      return;
+    }
+    const phone = phones[done];
     done++;
     bar.style.width = (done / total * 100) + '%';
-    txt.textContent = `جارٍ الإرسال… ${done} من ${total}`;
-    if (done >= total) {
-      clearInterval(timer);
-      txt.textContent = `✅ تم إرسال ${total} رسالة بنجاح`;
-      showToast(`✅ أُرسلت ${total} رسالة`);
-      setTimeout(() => { wrap.style.display='none'; bar.style.width='0%'; }, 4000);
-    }
-  }, 350);
+    txt.textContent = `جارٍ الفتح… ${done} من ${total}`;
+
+    // فتح واتساب ويب للرقم المستلم (الإرسال يكون من الحساب المفتوح على المتصفح)
+    const url = `https://web.whatsapp.com/send?phone=${phone}&text=${encodedMsg}`;
+    window.open(url, '_blank');
+
+    // تأخير ثانيتين بين كل رسالة لتجنب الحجب
+    setTimeout(sendNext, 2000);
+  }
+
+  // تنبيه المستخدم
+  showToast(`📱 سيُفتح واتساب ويب ${total} مرة — تأكد من تسجيل الدخول برقم ${senderNum}`);
+  setTimeout(sendNext, 800);
 }
 
 // ===== AUTO-REPLY PAGE =====

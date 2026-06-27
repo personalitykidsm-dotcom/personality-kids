@@ -248,6 +248,15 @@ function deleteUser(id) {
 // ── NURSERY TAB ────────────────────────────────────────────
 function renderNurseryTab(cont) {
   const s = DB.get('nurserySettings') || {};
+  const branchWa = s.branchWaNumbers || {};
+  const allBranches = [
+    { id:'esh',   name:'اشبيلية' },
+    { id:'sol',   name:'الصليبخات' },
+    { id:'mat',   name:'المطلاع' },
+    { id:'esh_e', name:'اشبيلية مسائي' },
+    { id:'sol_e', name:'الصليبخات مسائي' },
+    { id:'mat_e', name:'المطلاع مسائي' }
+  ];
   cont.innerHTML = `
     <div class="card" style="max-width:560px">
       <h3 style="margin-top:0">إعدادات الروضة</h3>
@@ -256,7 +265,7 @@ function renderNurseryTab(cont) {
         <input id="stgName" class="form-control" value="${s.name||'Personality Kids'}">
       </div>
       <div class="form-group">
-        <label>رقم WhatsApp للمسؤول</label>
+        <label>رقم WhatsApp للمسؤول (الرئيسي)</label>
         <input id="stgWA" class="form-control" placeholder="965XXXXXXXX" value="${s.waNumber||''}">
       </div>
       <div class="form-group">
@@ -272,11 +281,27 @@ function renderNurseryTab(cont) {
         <input id="stgInst" class="form-control" type="number" min="1" max="12" value="${s.defaultInstallments||4}">
       </div>
       <button class="btn btn-primary" onclick="saveNurserySettings()">💾 حفظ الإعدادات</button>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-top:16px">
+      <h3 style="margin-top:0">📱 أرقام واتساب مشرفي الفروع</h3>
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px">
+        رقم الواتساب الذي سترسل منه رسائل كل فرع — يجب أن يكون مفتوحاً في واتساب ويب أو الجهاز
+      </p>
+      ${allBranches.map(b => `
+      <div class="form-group">
+        <label>${b.name}</label>
+        <input id="branchWa_${b.id}" class="form-control" placeholder="965XXXXXXXX"
+          value="${branchWa[b.id]||''}">
+      </div>`).join('')}
+      <button class="btn btn-primary" onclick="saveBranchWaNumbers()">💾 حفظ أرقام الفروع</button>
     </div>`;
 }
 
 function saveNurserySettings() {
+  const s = DB.get('nurserySettings') || {};
   DB.set('nurserySettings', {
+    ...s,
     name:                document.getElementById('stgName').value.trim(),
     waNumber:            document.getElementById('stgWA').value.trim(),
     year:                document.getElementById('stgYear').value.trim(),
@@ -284,6 +309,18 @@ function saveNurserySettings() {
     defaultInstallments: parseInt(document.getElementById('stgInst').value) || 4
   });
   showToast('✅ تم حفظ إعدادات الروضة');
+}
+
+function saveBranchWaNumbers() {
+  const s = DB.get('nurserySettings') || {};
+  const allBranchIds = ['esh','sol','mat','esh_e','sol_e','mat_e'];
+  const branchWaNumbers = {};
+  allBranchIds.forEach(id => {
+    const el = document.getElementById('branchWa_' + id);
+    if (el) branchWaNumbers[id] = el.value.trim();
+  });
+  DB.set('nurserySettings', { ...s, branchWaNumbers });
+  showToast('✅ تم حفظ أرقام واتساب الفروع');
 }
 
 // ── DATA TAB ───────────────────────────────────────────────

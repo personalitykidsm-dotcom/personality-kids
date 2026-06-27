@@ -1019,7 +1019,7 @@ function printContract(studentId) {
       <tr><th>الخصم</th><td colspan="3">${discountLine}</td></tr>
       <tr><th>الصافي المستحق</th><td colspan="3"><b style="font-size:15px">${parseFloat(s.net || offerFee).toFixed(3)} د.ك</b></td></tr>
     </table>
-    <p style="margin:-4px 0 8px">خلال الفترة من سبتمبر (9) إلى مارس (3)، ضمن خطة دفع معتمدة:</p>
+    <p style="margin:-4px 0 8px">خلال الفترة من سبتمبر (9) إلى مارس (3) في حالة العرض السنوي، وخلال الفترة من سبتمبر (9) إلى مايو (5) في حالة بدون عرض سنوي، ضمن خطة دفع معتمدة:</p>
     <table class="fee-table">
       <thead><tr><th>#</th><th>البند</th><th>المبلغ</th><th>تاريخ الاستحقاق</th></tr></thead>
       <tbody>${instRows || '<tr><td colspan="4" style="text-align:center;color:#999">لا توجد أقساط</td></tr>'}</tbody>
