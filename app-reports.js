@@ -1294,19 +1294,36 @@ function supExportExcel(branch) {
 
 // ===== EXCEL EXPORTS =====
 function exportStudentsExcel() {
-  const allRefunds = DB.all('refunds');
+  const allRefunds  = DB.all('refunds');
+  const grades      = getGrades();
+  const gradeLabel  = Object.fromEntries(grades.map(g=>[g.id, g.label]));
+  const subTypeLabel = { monthly:'شهري', weekly:'أسبوعي', daily:'يومي' };
+
   const data = filterByBranch(DB.all('students')).map(s => {
     const refunded = allRefunds.filter(r=>r.studentId===s.id).reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
+    const st       = studentStatus(s);
+    const evening  = isEveningBranch(s.branch);
     return {
-      'الكود': s.id, 'الاسم': s.name,
+      'الكود': s.id,
+      'الاسم': s.name,
+      'المرحلة': gradeLabel[s.grade] || (s.grade === 'nursery' ? 'حضانة' : s.grade),
       'الفرع': BRANCHES[s.branch].name,
-      'المرحلة': s.grade === 'nursery' ? 'حضانة' : s.grade,
-      'هاتف 1': s.phone1, 'هاتف 2': s.phone2||'',
-      'الرسوم': s.fees, 'الخصم': s.discount,
-      'الصافي': s.net, 'المدفوع': s.paid,
+      'هاتف 1': s.phone1||'',
+      'هاتف 2': s.phone2||'',
+      'تاريخ الميلاد': fmtDate(s.dob),
+      'تاريخ المباشرة': fmtDate(s.startDate),
+      'نوع الاشتراك': evening ? (subTypeLabel[s.subscriptionType] || '') : '',
+      'انتهاء الاشتراك': evening ? fmtDate(s.subscriptionEnd) : '',
+      'تاريخ الانضمام': evening ? fmtDate(s.joinDate||s.startDate) : '',
+      'تاريخ الانسحاب': evening && s.enrollStatus==='withdrawn' ? fmtDate(s.withdrawDate) : '',
+      'الرسوم': s.fees,
+      'الخصم': s.discount,
+      'الصافي': s.net,
+      'المدفوع': s.paid,
       'المرتجع': refunded,
       'المحصّل الفعلي': parseFloat((s.paid - refunded).toFixed(3)),
-      'المتبقي': s.net - s.paid
+      'المتبقي': s.net - s.paid,
+      'الحالة': st.label
     };
   });
   xlsxExport(data, 'تقرير_الطلاب');

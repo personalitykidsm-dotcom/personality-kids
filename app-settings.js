@@ -906,19 +906,98 @@ function downloadStudentsTemplate() {
 }
 
 function downloadClothesTemplate() {
-  xlsxExport([{
-    'الكود':'C001','الصنف':'قميص','المقاس':'4 سنوات',
-    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الكمية':'10','الحد الأدنى':'5'
-  }], 'نموذج_الملابس');
+  xlsxExport([
+    {
+      'الصنف':'قميص','المقاس':'4 سنوات',
+      'الفرع (main=رئيسي / esh/sol/mat/esh_e/sol_e/mat_e)':'main',
+      'الكمية':'50','الحد الأدنى':'10'
+    },
+    {
+      'الصنف':'قميص','المقاس':'4 سنوات',
+      'الفرع (main=رئيسي / esh/sol/mat/esh_e/sol_e/mat_e)':'esh',
+      'الكمية':'10','الحد الأدنى':'5'
+    }
+  ], 'نموذج_الملابس');
+}
+
+function importClothesFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const allBranches = ['esh','sol','mat','esh_e','sol_e','mat_e'];
+  readExcelFile(file, rows => {
+    const types  = invGetTypes();
+    const main   = invGetMainStock();
+    const branch = invGetBranchStock();
+    let addedMain = 0, addedBranch = 0, skipped = 0;
+
+    rows.forEach(r => {
+      const item     = (r['الصنف']||'').toString().trim();
+      const size     = (r['المقاس']||'').toString().trim();
+      const branchRaw= (r['الفرع']||r['الفرع (main=رئيسي / esh/sol/mat/esh_e/sol_e/mat_e)']||'main').toString().trim().toLowerCase();
+      const qty      = parseInt(r['الكمية'])||0;
+      const minQty   = parseInt(r['الحد الأدنى'])||(typeof INV_MIN_QTY!=='undefined'?INV_MIN_QTY:10);
+
+      if (!item) { skipped++; return; }
+      const type = size ? `${item} ${size}` : item;
+      const branchKey = _BRANCH_MAP[branchRaw] || branchRaw;
+      const isMain = branchRaw === 'main' || branchRaw === '' || !allBranches.includes(branchKey);
+
+      // أضف النوع إن لم يكن موجوداً
+      if (!types.includes(type)) {
+        types.push(type);
+        main.push({type, qty: 0});
+        allBranches.forEach(b => branch.push({type, branch:b, qty:0, minQty}));
+      }
+
+      if (isMain) {
+        const idx = main.findIndex(i => i.type === type);
+        if (idx >= 0) { main[idx].qty += qty; addedMain++; }
+      } else if (allBranches.includes(branchKey)) {
+        const idx = branch.findIndex(i => i.type === type && i.branch === branchKey);
+        if (idx >= 0) { branch[idx].qty += qty; branch[idx].minQty = minQty; addedBranch++; }
+      } else { skipped++; }
+    });
+
+    DB.set('invTypes', types);
+    invSaveMain(main);
+    invSaveBranch(branch);
+    e.target.value = '';
+    showToast(`✅ تم: ${addedMain} صنف للمخزن الرئيسي، ${addedBranch} للفروع${skipped?' — تجاهل '+skipped+' صف':''}`);
+  });
 }
 
 function downloadSuppliesTemplate() {
   xlsxExport([{
-    'الكود':'P001','الصنف':'صابون يدين','الوحدة':'علبة',
-    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الكمية':'10',
+    'الصنف':'صابون يدين','الوحدة':'علبة',
+    'الفرع (esh/sol/mat/esh_e/sol_e/mat_e)':'esh','الكمية':'10','الحد الأدنى':'5',
     'تاريخ الاستلام (YYYY-MM-DD)':'2025-01-01',
     'تاريخ الانتهاء (YYYY-MM-DD)':'2026-01-01'
   }], 'نموذج_المستهلكات');
+}
+
+function importSuppliesFromExcel(e) {
+  const file = e.target.files[0]; if (!file) return;
+  readExcelFile(file, async rows => {
+    let added = 0, skipped = 0;
+    for (const r of rows) {
+      const name        = (r['الصنف']||'').toString().trim();
+      const branchRaw   = (r['الفرع']||r['الفرع (esh/sol/mat/esh_e/sol_e/mat_e)']||'').toString().trim();
+      const branchKey   = _BRANCH_MAP[branchRaw] || branchRaw;
+      const unit        = (r['الوحدة']||'').toString().trim();
+      const qty         = parseInt(r['الكمية'])||0;
+      const minQty      = parseInt(r['الحد الأدنى'])||5;
+      const receiveDate = excelDateToStr(r['تاريخ الاستلام']||r['تاريخ الاستلام (YYYY-MM-DD)']||'');
+      const expiryDate  = excelDateToStr(r['تاريخ الانتهاء']||r['تاريخ الانتهاء (YYYY-MM-DD)']||'');
+
+      if (!name || !branchKey) { skipped++; continue; }
+      const ok = await DB.add('supplies', {
+        id: DB.nextId('supplies','P'), name, unit,
+        branch: branchKey, qty, minQty, receiveDate, expiryDate
+      });
+      if (ok) added++; else skipped++;
+    }
+    e.target.value = '';
+    showToast(`✅ تم استيراد ${added} صنف${skipped?' — تجاهل '+skipped:''}`);
+  });
 }
 
 function downloadEmployeesTemplate() {

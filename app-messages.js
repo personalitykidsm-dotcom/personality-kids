@@ -14,7 +14,20 @@ let mediaFiles     = [];
 
 // ===== MESSAGES PAGE =====
 function renderMessages() {
-  const students = filterByBranch(DB.all('students'));
+  const isAdminUser = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
+  const userBranch  = currentUser?.branch || 'all';
+  const students    = filterByBranch(DB.all('students'));
+
+  // بناء قائمة الفروع حسب الصلاحية
+  const branchOptions = isAdminUser
+    ? `<option value="all">كل الفروع</option>
+       <option value="esh">اشبيلية</option>
+       <option value="sol">الصليبخات</option>
+       <option value="mat">المطلاع</option>
+       <option value="esh_e">اشبيلية مسائي</option>
+       <option value="sol_e">الصليبخات مسائي</option>
+       <option value="mat_e">المطلاع مسائي</option>`
+    : `<option value="${userBranch}">${BRANCHES[userBranch]?.name || userBranch}</option>`;
 
   document.getElementById('messagesContent').innerHTML = `
     <!-- Left: compose -->
@@ -23,11 +36,8 @@ function renderMessages() {
 
       <div class="form-row">
         <div class="form-group"><label>الفرع</label>
-          <select id="msgBranch" onchange="filterMsgContacts()">
-            <option value="all">كل الفروع</option>
-            <option value="esh">اشبيلية</option>
-            <option value="sol">الصليبخات</option>
-            <option value="mat">المطلاع</option>
+          <select id="msgBranch" onchange="filterMsgContacts()" ${!isAdminUser ? 'disabled style="background:var(--bg-secondary);color:var(--text-muted)"' : ''}>
+            ${branchOptions}
           </select>
         </div>
         <div class="form-group"><label>المرحلة</label>
@@ -183,30 +193,30 @@ function previewMsgMedia(input) {
 }
 
 function loadBranchSenderNumber() {
-  const branchEl = document.getElementById('msgBranch');
-  const branch   = branchEl ? branchEl.value : 'all';
-  const s        = DB.get('nurserySettings') || {};
-  const branchWa = s.branchWaNumbers || {};
-  const senderEl = document.getElementById('msgSenderNumber');
-  const infoEl   = document.getElementById('msgSenderInfo');
+  const isAdminUser = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
+  const branchEl    = document.getElementById('msgBranch');
+  const s           = DB.get('nurserySettings') || {};
+  const branchWa    = s.branchWaNumbers || {};
+  const senderEl    = document.getElementById('msgSenderNumber');
+  const infoEl      = document.getElementById('msgSenderInfo');
   if (!senderEl) return;
 
-  // حاول رقم الفرع المحدد، ثم رقم المشرف الحالي، ثم الرقم الرئيسي
-  let num = '';
-  let label = '';
-  if (branch !== 'all' && branchWa[branch]) {
-    num   = branchWa[branch];
-    label = `رقم فرع ${BRANCHES[branch]?.name || branch}`;
-  } else if (currentUser?.branch && currentUser.branch !== 'all' && branchWa[currentUser.branch]) {
-    num   = branchWa[currentUser.branch];
-    label = `رقم فرعك (${BRANCHES[currentUser.branch]?.name || currentUser.branch})`;
+  // المشرف: رقم فرعه دائماً — المدير: رقم الفرع المختار أو الرئيسي
+  let effectiveBranch = isAdminUser ? (branchEl?.value || 'all') : (currentUser?.branch || 'all');
+
+  let num = '', label = '';
+  if (effectiveBranch !== 'all' && branchWa[effectiveBranch]) {
+    num   = branchWa[effectiveBranch];
+    label = `رقم فرع ${BRANCHES[effectiveBranch]?.name || effectiveBranch}`;
   } else if (s.waNumber) {
     num   = s.waNumber;
     label = 'الرقم الرئيسي للروضة';
   }
 
   senderEl.value = num;
-  if (infoEl) infoEl.textContent = label ? `📍 ${label}` : 'لم يُضبط رقم — أدخله يدوياً أو احفظه في الإعدادات';
+  if (infoEl) infoEl.textContent = label
+    ? `📍 ${label} — تأكد من تسجيل دخوله في واتساب ويب`
+    : 'لم يُضبط رقم — أدخله يدوياً أو احفظه في الإعدادات';
 }
 
 function updateSenderDisplay() {
@@ -215,8 +225,13 @@ function updateSenderDisplay() {
 }
 
 function filterMsgContacts() {
-  const branch = document.getElementById('msgBranch').value;
-  const grade  = document.getElementById('msgGrade').value;
+  const isAdminUser = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
+  const branchEl    = document.getElementById('msgBranch');
+  const grade       = document.getElementById('msgGrade').value;
+
+  // المشرف محدود بفرعه دائماً
+  const branch = isAdminUser ? (branchEl?.value || 'all') : (currentUser?.branch || 'all');
+
   let list = DB.all('students');
   if (branch !== 'all') list = list.filter(s => s.branch === branch);
   if (grade  !== 'all') list = list.filter(s => s.grade  === grade);
@@ -281,6 +296,8 @@ function sendBulkMsg() {
   }
 
   // تنبيه المستخدم
+  const infoEl = document.getElementById('msgSenderInfo');
+  if (infoEl) infoEl.innerHTML = `📍 يتم الإرسال من: <b>${senderNum}</b><br><span style="color:#e67e22">⚠️ الأرقام غير المسجلة على واتساب لن تصلها الرسالة</span>`;
   showToast(`📱 سيُفتح واتساب ويب ${total} مرة — تأكد من تسجيل الدخول برقم ${senderNum}`);
   setTimeout(sendNext, 800);
 }
