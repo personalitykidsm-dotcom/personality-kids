@@ -6,14 +6,26 @@ const SUPABASE_URL = 'https://idtopctbogyaciasftza.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkdG9wY3Rib2d5YWNpYXNmdHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzE0NTUsImV4cCI6MjA5NTEwNzQ1NX0.DG6e0Fh7oHC5A588Jhupcs6yVb91D_vfKKwN60FUdiQ';
 
 const BRANCHES = {
-  all:   { name: 'كل الفروع',        badge: 'badge-gray'   },
-  esh:   { name: 'اشبيلية',          badge: 'badge-green'  },
-  sol:   { name: 'الصليبخات',        badge: 'badge-blue'   },
-  mat:   { name: 'المطلاع',          badge: 'badge-purple' },
-  esh_e: { name: 'اشبيلية مسائي',   badge: 'badge-green'  },
-  sol_e: { name: 'الصليبخات مسائي', badge: 'badge-blue'   },
-  mat_e: { name: 'المطلاع مسائي',   badge: 'badge-purple' }
+  all:    { name: 'كل الفروع',          badge: 'badge-gray'   },
+  // نادي صيفي — نفس الفروع/البيانات الموجودة حالياً، بدون أي تغيير
+  esh:    { name: 'اشبيلية',            badge: 'badge-green'  },
+  sol:    { name: 'الصليبخات',          badge: 'badge-blue'   },
+  mat:    { name: 'المطلاع',            badge: 'badge-purple' },
+  esh_e:  { name: 'اشبيلية مسائي',     badge: 'badge-green'  },
+  sol_e:  { name: 'الصليبخات مسائي',   badge: 'badge-blue'   },
+  mat_e:  { name: 'المطلاع مسائي',     badge: 'badge-purple' },
+  // عقود — فروع جديدة موازية لكل موقع، تبدأ فاضية
+  esh_c:  { name: 'اشبيلية (عقود)',    badge: 'badge-green'  },
+  sol_c:  { name: 'الصليبخات (عقود)',  badge: 'badge-blue'   },
+  mat_c:  { name: 'المطلاع (عقود)',    badge: 'badge-purple' }
 };
+
+// Safe lookup — a student/employee record can end up with a branch value that
+// isn't (or is no longer) a recognized code, e.g. an old/blank/legacy value.
+// BRANCHES[x].name would crash the whole page in that case; this never does.
+function branchInfo(branch) {
+  return BRANCHES[branch] || { name: branch || '—', badge: 'badge-gray' };
+}
 
 const ROLES_HR = [
   'معلمة KG1','معلمة KG2','معلمة حضانة','مشرفة',
@@ -313,19 +325,57 @@ function fmtDate(d){ if(!d) return '—'; return d.replace(/-/g,'/'); }
 function fmtKD(n){ return parseFloat(n||0).toFixed(3)+' د.ك'; }
 const EVENING_BRANCHES = ['esh_e','sol_e','mat_e'];
 function isEveningBranch(branch){ return EVENING_BRANCHES.includes(branch); }
-const MORNING_BRANCHES = ['esh','sol','mat'];
+// MORNING_BRANCHES now points at the *new* عقود branches — these are the only
+// ones that get the full contract paperwork (فئة العقد, خصومات, بيانات الأب/الأم,
+// طباعة عقد...). The original esh/sol/mat codes (نادي صيفي) no longer do.
+const MORNING_BRANCHES = ['esh_c','sol_c','mat_c'];
 function isMorningBranch(branch){ return MORNING_BRANCHES.includes(branch); }
+// نادي صيفي = اشبيلية/الصليبخات/المطلاع فقط — الفروع المسائية فرع مستقل تمامًا
+// وليست جزءاً من نادي صيفي ولا العقود (زي ما كانت من الأول).
+const SUMMER_BRANCHES = ['esh','sol','mat'];
+function isSummerBranch(branch){ return SUMMER_BRANCHES.includes(branch); }
+// عقود = الفروع الجديدة (esh_c / sol_c / mat_c) — فاضية، تُستخدم للتسجيلات الجديدة بعقد سنوي
+const CONTRACT_BRANCHES = ['esh_c', 'sol_c', 'mat_c'];
+// استمارة الطالب تستخدم "السن" بدل "المرحلة" في نادي صيفي وفي المسائي كمان —
+// العقود فقط هي اللي بتفضل بنظام المرحلة/فئة العقد.
+function usesAgeField(branch){ return isSummerBranch(branch) || isEveningBranch(branch); }
+
+// Strips the _c/_e suffix so esh_c, esh_e and esh all resolve to the same
+// physical location "esh".
+function branchLocation(branch) { return (branch || '').replace(/_c$|_e$/, ''); }
+
+// For a morning-location branch code (نادي صيفي or عقود), returns the pair of
+// codes a branch supervisor at that location should be able to switch between
+// on the Students page — e.g. 'esh' or 'esh_c' both return {summer:'esh', contract:'esh_c'}.
+// Evening-assigned accounts (esh_e...) and unrecognized branches return null —
+// those stay locked to a single branch (their own مسائي فرع), exactly as before.
+function branchSectionPair(userBranch) {
+  if (!userBranch || EVENING_BRANCHES.includes(userBranch)) return null;
+  const loc = branchLocation(userBranch);
+  const summerCode = loc, contractCode = loc + '_c';
+  if (SUMMER_BRANCHES.includes(summerCode) && CONTRACT_BRANCHES.includes(contractCode)) {
+    return { summer: summerCode, contract: contractCode };
+  }
+  return null;
+}
 
 // ============================================================
 // CONTRACT SETTINGS (per morning branch: categories, discounts, terms)
 // ============================================================
+// esh_c/sol_c/mat_c are the new "عقود" branches. Any فئات/خصومات already
+// configured under the old esh/sol/mat keys (from before the عقود/نادي صيفي
+// split) are carried forward automatically so nothing set up earlier is lost.
+const LEGACY_CONTRACT_BRANCH_MAP = { esh_c: 'esh', sol_c: 'sol', mat_c: 'mat' };
+
 function getContractSettings(){
   const def = {};
   MORNING_BRANCHES.forEach(b=>{ def[b] = { categories:{}, discounts:[], terms:'' }; });
   const saved = DB.get('contractSettings') || {};
-  // merge to make sure all morning branches exist with proper shape
+  // merge to make sure all morning (عقود) branches exist with proper shape
   MORNING_BRANCHES.forEach(b=>{
-    const sb = saved[b] || {};
+    const legacyKey = LEGACY_CONTRACT_BRANCH_MAP[b];
+    const hasOwn    = saved[b] && (Object.keys(saved[b].categories||{}).length || (saved[b].discounts||[]).length || saved[b].terms);
+    const sb = hasOwn ? saved[b] : (legacyKey && saved[legacyKey] ? saved[legacyKey] : (saved[b] || {}));
     def[b] = {
       categories: sb.categories || {},
       discounts:  sb.discounts  || [],
@@ -336,6 +386,38 @@ function getContractSettings(){
 }
 function saveContractSettings(settings){
   DB.set('contractSettings', settings);
+}
+
+// ============================================================
+// ONE-TIME MIGRATION: اشبيلية/الصليبخات (esh/sol) → عقود (esh_c/sol_c)
+// ============================================================
+// Moves every existing student record from the old esh/sol branch codes to
+// their new "عقود" counterparts. المطلاع (mat) and all evening/مسائي branches
+// (esh_e/sol_e/mat_e) are left untouched — they stay نادي صيفي, exactly as
+// they are today. Runs once on boot; idempotent — once no students remain on
+// the old esh/sol codes it no-ops on every later load.
+const CONTRACT_MIGRATION_MAP = { esh: 'esh_c', sol: 'sol_c' };
+
+async function migrateContractBranches() {
+  for (const [oldBranch, newBranch] of Object.entries(CONTRACT_MIGRATION_MAP)) {
+    const rows = (CACHE['students'] || []).filter(r => r.branch === oldBranch);
+    if (!rows.length) continue;
+    try {
+      await SB.patch('students', 'branch=eq.' + oldBranch, { branch: newBranch });
+      // reflect immediately in the local cache so the UI doesn't wait for the
+      // next 10-second auto-refresh
+      CACHE['students'] = (CACHE['students'] || []).map(r =>
+        r.branch === oldBranch ? { ...r, branch: newBranch } : r
+      );
+      console.log(`✅ migrateContractBranches: ${rows.length} طالب من "${oldBranch}" إلى "${newBranch}"`);
+      if (typeof showToast === 'function') {
+        showToast(`✅ تم نقل ${rows.length} طالب من ${BRANCHES[oldBranch]?.name || oldBranch} إلى ${BRANCHES[newBranch]?.name || newBranch}`);
+      }
+      if (typeof renderCurrentPage === 'function') renderCurrentPage();
+    } catch (e) {
+      console.error('migrateContractBranches error:', oldBranch, '→', newBranch, e);
+    }
+  }
 }
 
 // ============================================================

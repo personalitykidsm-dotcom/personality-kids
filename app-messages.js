@@ -273,33 +273,36 @@ function sendBulkMsg() {
   bar.style.width    = '0%';
 
   const encodedMsg = encodeURIComponent(msg);
-  let done = 0;
 
-  function sendNext() {
-    if (done >= total) {
-      txt.textContent = `✅ تم فتح ${total} محادثة واتساب`;
-      showToast(`✅ تم فتح ${total} محادثة واتساب`);
-      setTimeout(() => { wrap.style.display='none'; bar.style.width='0%'; }, 5000);
-      return;
-    }
-    const phone = phones[done];
-    done++;
-    bar.style.width = (done / total * 100) + '%';
-    txt.textContent = `جارٍ الفتح… ${done} من ${total}`;
-
-    // فتح واتساب ويب للرقم المستلم (الإرسال يكون من الحساب المفتوح على المتصفح)
+  // مهم: نفتح كل نوافذ واتساب فوراً وبشكل متزامن (بدون أي setTimeout بينها).
+  // المتصفحات تحجب أي window.open() يحصل داخل setTimeout لأنه لا يُعتبر
+  // ناتجاً مباشرة عن ضغطة المستخدم — وهذا كان سبب توقف الفتح بعد أول رقم
+  // فقط (كل الأرقام التالية كانت تُحجب كـ Pop-up بصمت).
+  let opened = 0, blocked = 0;
+  phones.forEach((phone, i) => {
     const url = `https://web.whatsapp.com/send?phone=${phone}&text=${encodedMsg}`;
-    window.open(url, '_blank');
+    const win = window.open(url, '_blank');
+    if (win) opened++; else blocked++;
+    bar.style.width = ((i + 1) / total * 100) + '%';
+  });
 
-    // تأخير ثانيتين بين كل رسالة لتجنب الحجب
-    setTimeout(sendNext, 2000);
+  txt.textContent = blocked
+    ? `⚠️ تم فتح ${opened} من ${total} — حجب المتصفح ${blocked} نافذة`
+    : `✅ تم فتح ${total} محادثة واتساب`;
+
+  if (blocked) {
+    showToast(`⚠️ حجب المتصفح ${blocked} نافذة منبثقة. اسمح بالنوافذ المنبثقة (Pop-ups) لهذا الموقع من إعدادات المتصفح ثم أعد المحاولة`);
+  } else {
+    showToast(`✅ تم فتح ${total} محادثة واتساب`);
   }
 
   // تنبيه المستخدم
   const infoEl = document.getElementById('msgSenderInfo');
-  if (infoEl) infoEl.innerHTML = `📍 يتم الإرسال من: <b>${senderNum}</b><br><span style="color:#e67e22">⚠️ الأرقام غير المسجلة على واتساب لن تصلها الرسالة</span>`;
-  showToast(`📱 سيُفتح واتساب ويب ${total} مرة — تأكد من تسجيل الدخول برقم ${senderNum}`);
-  setTimeout(sendNext, 800);
+  if (infoEl) infoEl.innerHTML = `📍 يتم الإرسال من: <b>${senderNum}</b><br>` +
+    `<span style="color:#e67e22">⚠️ الأرقام غير المسجلة على واتساب لن تصلها الرسالة</span><br>` +
+    `<span style="color:#e67e22">⚠️ واتساب ويب لا يرسل تلقائياً — لازم تضغط زر الإرسال يدوياً داخل كل محادثة تُفتح</span>`;
+
+  setTimeout(() => { wrap.style.display = 'none'; bar.style.width = '0%'; }, 6000);
 }
 
 // ===== AUTO-REPLY PAGE =====

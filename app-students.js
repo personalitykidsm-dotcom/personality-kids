@@ -4,6 +4,16 @@
 
 // ===== ADD STUDENT MODAL =====
 function openAddStudent() {
+  // supervisors at a morning location (اشبيلية/الصليبخات/المطلاع) can register
+  // either a نادي صيفي or عقود student at their own location; anyone else
+  // non-admin (evening accounts) stays locked to their single assigned branch
+  const _addPair = (currentUser && !isAdmin(currentUser)) ? branchSectionPair(currentUser.branch) : null;
+  const _addBranchLocked = currentUser && !isAdmin(currentUser) && !_addPair;
+  const _addBranchKeys = isAdmin(currentUser)
+    ? Object.keys(BRANCHES).filter(k => k !== 'all')
+    : (_addPair ? [_addPair.summer, _addPair.contract] : [currentUser?.branch]);
+  const _addBranchOptionsHtml = _addBranchKeys.map(k => `<option value="${k}">${BRANCHES[k]?.name || k}</option>`).join('');
+
   const html = `
   <div id="modal-student" class="modal-overlay open">
     <div class="modal modal-lg">
@@ -25,18 +35,17 @@ function openAddStudent() {
         </div>
 
         <div class="form-row">
-          <div class="form-group">
-            <label>المرحلة *</label>
+          <div class="form-group" id="sGradeFieldWrap">
+            <label id="sGradeLabel">المرحلة *</label>
             <select id="sGrade">
               ${getGrades().map(g=>`<option value="${g.id}">${g.label}</option>`).join('')}
             </select>
+            <input type="number" id="sAge" min="1" max="18" placeholder="مثال: 5" style="display:none">
           </div>
           <div class="form-group">
             <label>الفرع *</label>
-            <select id="sBranch" ${currentUser?.role !== 'admin' ? 'disabled' : ''}>
-              ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>
-                `<option value="${k}">${v.name}</option>`
-              ).join('')}
+            <select id="sBranch" ${_addBranchLocked ? 'disabled' : ''}>
+              ${_addBranchOptionsHtml}
             </select>
           </div>
         </div>
@@ -66,7 +75,7 @@ function openAddStudent() {
         <hr style="margin:14px 0;border-color:var(--border)">
         <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:12px">💰 الرسوم والأقساط</div>
 
-        <div class="form-row-3">
+        <div class="form-row-4">
           <div class="form-group">
             <label>الرسوم الإجمالية (د.ك) *</label>
             <input type="number" id="sFees" placeholder="1200" step="0.001" oninput="calcNet()">
@@ -74,6 +83,10 @@ function openAddStudent() {
           <div class="form-group">
             <label>الخصم (د.ك)</label>
             <input type="number" id="sDiscount" placeholder="0" step="0.001" oninput="calcNet()">
+          </div>
+          <div class="form-group">
+            <label>قضاء يوم (د.ك)</label>
+            <input type="number" id="sDayUse" placeholder="0" readonly>
           </div>
           <div class="form-group">
             <label>الصافي (د.ك)</label>
@@ -84,6 +97,15 @@ function openAddStudent() {
         <div class="form-group">
           <label>سبب الخصم</label>
           <input type="text" id="sDiscountReason" placeholder="اختياري">
+        </div>
+
+        <!-- Day-use (قضاء يوم) — amounts already collected for single trial/drop-in
+             days before full enrollment; each entry is subtracted from the fees so
+             the remaining installments only cover what's left of the month. -->
+        <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px">🗓️ قضاء يوم (يُخصم من الرسوم)</div>
+          <div id="sDayUseRows"></div>
+          <button class="btn btn-outline btn-sm" type="button" onclick="addDayUseRow('s')">➕ إضافة قضاء يوم</button>
         </div>
 
         <!-- Installment builder -->
@@ -198,9 +220,14 @@ function openAddStudent() {
 
   // set branch based on user role
   const branchSel = document.getElementById('sBranch');
-  if (currentUser?.role !== 'admin') {
-    branchSel.value    = currentUser.branch;
-    branchSel.disabled = true;
+  if (!isAdmin(currentUser)) {
+    if (_addPair) {
+      // default to whichever section (عقود/نادي صيفي) the supervisor is currently viewing
+      branchSel.value = (studentsSection === 'contract') ? _addPair.contract : _addPair.summer;
+    } else {
+      branchSel.value    = currentUser.branch;
+      branchSel.disabled = true;
+    }
   } else if (currentBranch !== 'all') {
     branchSel.value = currentBranch;
   }
@@ -219,6 +246,11 @@ function openAddStudent() {
         window._contractPlanRows = null;
       }
     }
+    // نادي صيفي والمسائي: السن بدل المرحلة — العقود فقط بيفضل بالمرحلة
+    const useAge = usesAgeField(branch);
+    document.getElementById('sGrade').style.display = useAge ? 'none' : '';
+    document.getElementById('sAge').style.display   = useAge ? '' : 'none';
+    document.getElementById('sGradeLabel').textContent = useAge ? 'السن' : 'المرحلة *';
   }
   branchSel.addEventListener('change', toggleBranchFields);
   toggleBranchFields();
@@ -492,11 +524,64 @@ function applyContractDiscount(prefix) {
   if (prefix === 's') calcNet(); else calcEditNet();
 }
 
+// ===== DAY-USE (قضاء يوم) ROWS =====
+// Each row records an amount already collected for a single trial/drop-in day
+// before the student enrolled for the full month. The total is subtracted
+// from the fees so only the remaining part of the month is billed.
+function addDayUseRow(prefix, amount, date) {
+  const wrap = document.getElementById(prefix + 'DayUseRows');
+  if (!wrap) return;
+  const n = wrap.querySelectorAll('[data-dayuse-row]').length + 1;
+  const calcFn = prefix === 's' ? 'calcNet()' : 'calcEditNet()';
+  const div = document.createElement('div');
+  div.className = 'form-row';
+  div.style.cssText = 'align-items:end;margin-bottom:8px';
+  div.setAttribute('data-dayuse-row', '');
+  div.innerHTML = `
+    <div class="form-group" style="margin:0">
+      <label>قضاء يوم ${n}</label>
+      <input type="number" class="dayuse-amt" placeholder="المبلغ (د.ك)" step="0.001" min="0" value="${amount || ''}"
+        style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%"
+        oninput="${calcFn}">
+    </div>
+    <div class="form-group" style="margin:0;display:flex;gap:6px">
+      <input type="date" class="dayuse-date" value="${date || ''}"
+        style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px"
+        onchange="${calcFn}">
+      <button type="button" onclick="removeDayUseRow(this,'${prefix}')" title="حذف"
+        style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">🗑</button>
+    </div>`;
+  wrap.appendChild(div);
+  renumberDayUseRows(prefix);
+}
+
+function removeDayUseRow(btn, prefix) {
+  btn.closest('[data-dayuse-row]').remove();
+  renumberDayUseRows(prefix);
+  if (prefix === 's') calcNet(); else calcEditNet();
+}
+
+function renumberDayUseRows(prefix) {
+  const wrap = document.getElementById(prefix + 'DayUseRows');
+  if (!wrap) return;
+  wrap.querySelectorAll('[data-dayuse-row] label').forEach((lbl, i) => { lbl.textContent = 'قضاء يوم ' + (i + 1); });
+}
+
+function getDayUseTotal(prefix) {
+  const wrap = document.getElementById(prefix + 'DayUseRows');
+  if (!wrap) return 0;
+  return Array.from(wrap.querySelectorAll('.dayuse-amt'))
+    .reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
+}
+
 // ===== NET CALCULATION =====
 function calcNet() {
-  const fees = parseFloat(document.getElementById('sFees').value) || 0;
-  const disc = parseFloat(document.getElementById('sDiscount').value) || 0;
-  const net  = Math.max(0, fees - disc);
+  const fees   = parseFloat(document.getElementById('sFees').value) || 0;
+  const disc   = parseFloat(document.getElementById('sDiscount').value) || 0;
+  const dayUse = getDayUseTotal('s');
+  const dayUseEl = document.getElementById('sDayUse');
+  if (dayUseEl) dayUseEl.value = dayUse.toFixed(3);
+  const net  = Math.max(0, fees - disc - dayUse);
   document.getElementById('sNet').value = net.toFixed(3);
   buildInstRows();
 }
@@ -642,11 +727,16 @@ async function saveStudent() {
   const id = document.getElementById('sId').value;
   const branch = document.getElementById('sBranch').value;
   const isEvening = isEveningBranch(branch);
+  // نادي صيفي والمسائي يستخدموا السن بدل المرحلة — بيتخزن في نفس عمود grade
+  const ageVal = document.getElementById('sAge')?.value;
+  const grade = usesAgeField(branch)
+    ? (ageVal ? ageVal + ' سنوات' : '')
+    : document.getElementById('sGrade').value;
   const student = {
     id,
     name,
     branch,
-    grade:           document.getElementById('sGrade').value,
+    grade,
     phone1,
     phone2:          document.getElementById('sPhone2').value.trim(),
     dob:             document.getElementById('sDob').value,
@@ -1061,7 +1151,8 @@ function openStudentInstallments(studentId) {
       ? `<a href="${i.payLink}" target="_blank" class="btn btn-outline btn-sm" title="رابط الدفع">🔗</a>`
       : '';
 
-    const canPay = i.status === 'pending' || i.status === 'partial';
+    const canPay  = i.status === 'pending' || i.status === 'partial';
+    const canEdit = isAdmin(currentUser); // مدير عام / مدير رئيسي فقط — مستخدمو الفروع لا يملكون هذه الصلاحية
     return `<tr>
       <td>${i.num}</td>
       <td>${fmtKD(i.amount)}${partialInfo}</td>
@@ -1071,6 +1162,7 @@ function openStudentInstallments(studentId) {
       <td>${statusBadge}</td>
       <td style="white-space:nowrap">
         ${canPay ? `<button class="btn btn-primary btn-sm" onclick="payInstallment('${i.id}','${studentId}')">💳 دفع</button>` : ''}
+        ${canEdit ? `<button class="btn btn-outline btn-sm" onclick="editInstallment('${i.id}','${studentId}')" title="تعديل المبلغ / التاريخ / طريقة الدفع">✏️</button>` : ''}
         ${receiptBtn}${linkBtn}
       </td>
     </tr>`;
@@ -1208,6 +1300,142 @@ function saveQuickInstallment(studentId) {
   document.getElementById('modal-quick-inst').remove();
   openStudentInstallments(studentId);
   showToast('✅ تم إضافة القسط');
+}
+
+// ===== EDIT INSTALLMENT (amount / date / payment method) =====
+// Restricted to admin (مدير عام) and super_admin (مدير رئيسي) — branch users (مشرف) never see this button.
+const PAY_METHODS = ['نقدي', 'برنامج', 'كي نت', 'رابط'];
+
+function editInstallment(instId, studentId) {
+  if (!isAdmin(currentUser)) { showToast('⛔ هذه الصلاحية للمدير العام / الرئيسي فقط'); return; }
+
+  const inst = DB.all('installments').find(i => i.id === instId);
+  if (!inst) return;
+
+  const dateVal      = inst.paidDate || inst.dueDate || '';
+  const isPartialNow = inst.status === 'partial';
+  const methodOptions = PAY_METHODS.map(m =>
+    `<option value="${m}" ${inst.method === m ? 'selected' : ''}>${m}</option>`
+  ).join('') + (inst.method && !PAY_METHODS.includes(inst.method)
+    ? `<option value="${inst.method}" selected>${inst.method}</option>` : '');
+
+  const html = `
+    <div id="modal-edit-inst" class="modal-overlay open">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <div class="modal-title">✏️ تعديل القسط ${inst.num}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-edit-inst').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>المبلغ الكلي للقسط (د.ك)</label>
+            <input type="number" id="eiAmount" step="0.001" min="0" value="${inst.amount}"
+              oninput="_eiSyncPartialMax()"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+
+          <div class="form-group">
+            <label>نوع الدفع</label>
+            <div class="pay-method" id="eiPayTypeChips" style="margin-bottom:10px">
+              <div class="pay-chip ${isPartialNow ? '' : 'selected'}" onclick="selEditPayType(this,'full')">💯 دفع كامل</div>
+              <div class="pay-chip ${isPartialNow ? 'selected' : ''}" onclick="selEditPayType(this,'partial')">✂️ دفع جزئي</div>
+            </div>
+          </div>
+
+          <div class="form-group" id="eiPartialAmtGroup" style="display:${isPartialNow ? '' : 'none'}">
+            <label>المبلغ المدفوع (د.ك) *</label>
+            <input type="number" id="eiPartialAmt" step="0.001" min="0.001" max="${inst.amount}"
+              value="${inst.partialPaid || ''}" placeholder="0.000"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+
+          <div class="form-group">
+            <label>التاريخ</label>
+            <input type="date" id="eiDate" value="${dateVal}"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+          </div>
+          <div class="form-group">
+            <label>طريقة الدفع</label>
+            <select id="eiMethod" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;width:100%">
+              ${methodOptions}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('modal-edit-inst').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveEditInstallment('${instId}','${studentId}')">💾 حفظ التعديل</button>
+        </div>
+      </div>
+    </div>`;
+
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  document.getElementById('modals').appendChild(div.firstElementChild);
+}
+
+// scoped to #eiPayTypeChips so it never touches the (hidden, unrelated)
+// pay-chip groups that other pages/modals leave sitting in the DOM
+function selEditPayType(el, type) {
+  el.closest('#eiPayTypeChips').querySelectorAll('.pay-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('eiPartialAmtGroup').style.display = type === 'partial' ? '' : 'none';
+}
+
+function _eiSyncPartialMax() {
+  const amt = parseFloat(document.getElementById('eiAmount')?.value) || 0;
+  const partialEl = document.getElementById('eiPartialAmt');
+  if (partialEl) partialEl.max = amt;
+}
+
+function saveEditInstallment(instId, studentId) {
+  if (!isAdmin(currentUser)) { showToast('⛔ هذه الصلاحية للمدير العام / الرئيسي فقط'); return; }
+
+  const inst    = DB.all('installments').find(i => i.id === instId);
+  const student = DB.all('students').find(s => s.id === studentId);
+  if (!inst || !student) return;
+
+  const newAmount = parseFloat(document.getElementById('eiAmount').value) || 0;
+  const newDate   = document.getElementById('eiDate').value;
+  const newMethod = document.getElementById('eiMethod').value;
+  const isPartial = document.querySelector('#eiPayTypeChips .pay-chip.selected')?.textContent.includes('جزئي');
+
+  if (newAmount <= 0) { showToast('⚠️ أدخل مبلغ صحيح'); return; }
+  if (!newDate) { showToast('⚠️ يجب إدخال التاريخ'); return; }
+
+  let newPartialPaid, newStatus;
+  if (isPartial) {
+    newPartialPaid = parseFloat(document.getElementById('eiPartialAmt').value) || 0;
+    if (newPartialPaid <= 0) { showToast('⚠️ أدخل المبلغ المدفوع'); return; }
+    if (newPartialPaid > newAmount) { showToast('⚠️ المبلغ المدفوع أكبر من مبلغ القسط'); return; }
+    newStatus = newPartialPaid >= newAmount ? 'paid' : 'partial';
+  } else {
+    newPartialPaid = newAmount;
+    newStatus = 'paid';
+  }
+
+  // keep the student's collected total consistent with whatever was
+  // actually recorded on this installment before this edit
+  const oldCollected = inst.status === 'paid'    ? (parseFloat(inst.amount) || 0)
+                      : inst.status === 'partial' ? (inst.partialPaid || 0)
+                      : 0;
+  const studentPaidDelta = newPartialPaid - oldCollected;
+
+  DB.update('installments', instId, {
+    amount:      newAmount,
+    method:      newMethod,
+    paidDate:    newDate,
+    partialPaid: newPartialPaid,
+    status:      newStatus
+  });
+
+  if (studentPaidDelta !== 0) {
+    const newPaid = Math.max(0, Math.min(student.paid + studentPaidDelta, student.net));
+    DB.update('students', studentId, { paid: newPaid });
+  }
+
+  document.getElementById('modal-edit-inst').remove();
+  openStudentInstallments(studentId);
+  showToast('✅ تم حفظ التعديل');
 }
 
 // ===== PAY INSTALLMENT =====
@@ -1445,7 +1673,7 @@ function printInstallmentsPDF(studentId) {
     <h2>🌟 Personality Kids — خطة أقساط</h2>
     <div class="info">
       <span><b>الطالب:</b> ${s.name}</span>
-      <span><b>الفرع:</b> ${BRANCHES[s.branch].name}</span>
+      <span><b>الفرع:</b> ${branchInfo(s.branch).name}</span>
       <span><b>الصافي:</b> ${fmtKD(s.net)}</span>
       <span><b>المدفوع:</b> ${fmtKD(s.paid)}</span>
       <span><b>المتبقي:</b> ${fmtKD(s.net - s.paid)}</span>
@@ -1487,6 +1715,14 @@ function addMonths(dateStr, months) {
 function openEditStudent(id) {
   const s = DB.all('students').find(st => st.id === id);
   if (!s) { showToast('⚠️ الطالب غير موجود'); return; }
+
+  // same pairing rule as the add-student form: a supervisor at a morning
+  // location can move a student between نادي صيفي/عقود at their own location
+  const _editPair = (currentUser && !isAdmin(currentUser)) ? branchSectionPair(currentUser.branch) : null;
+  const _editBranchLocked = currentUser && !isAdmin(currentUser) && !_editPair;
+  const _editBranchKeys = isAdmin(currentUser)
+    ? Object.keys(BRANCHES).filter(k => k !== 'all')
+    : (_editPair ? [_editPair.summer, _editPair.contract] : [currentUser?.branch]);
 
   const existingInst = DB.all('installments').filter(i => i.studentId === id);
 
@@ -1533,17 +1769,19 @@ function openEditStudent(id) {
         </div>
 
         <div class="form-row">
-          <div class="form-group">
-            <label>المرحلة *</label>
+          <div class="form-group" id="esGradeFieldWrap">
+            <label id="esGradeLabel">المرحلة *</label>
             <select id="esGrade">
               ${getGrades().map(g=>`<option value="${g.id}" ${g.id===s.grade?'selected':''}>${g.label}</option>`).join('')}
             </select>
+            <input type="number" id="esAge" min="1" max="18" placeholder="مثال: 5"
+              value="${(s.grade && /^\d+/.test(s.grade)) ? s.grade.match(/^\d+/)[0] : ''}" style="display:none">
           </div>
           <div class="form-group">
             <label>الفرع *</label>
-            <select id="esBranch" ${currentUser?.role !== 'admin' ? 'disabled' : ''}>
-              ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>
-                `<option value="${k}" ${k===s.branch?'selected':''}>${v.name}</option>`
+            <select id="esBranch" ${_editBranchLocked ? 'disabled' : ''}>
+              ${_editBranchKeys.map(k =>
+                `<option value="${k}" ${k===s.branch?'selected':''}>${BRANCHES[k]?.name || k}</option>`
               ).join('')}
             </select>
           </div>
@@ -1593,7 +1831,7 @@ function openEditStudent(id) {
         <hr style="margin:14px 0;border-color:var(--border)">
         <div style="font-size:13px;font-weight:700;color:var(--primary-dark);margin-bottom:12px">💰 الرسوم والأقساط</div>
 
-        <div class="form-row-3">
+        <div class="form-row-4">
           <div class="form-group">
             <label>الرسوم الإجمالية (د.ك) *</label>
             <input type="number" id="esFees" value="${s.fees}" step="0.001" oninput="calcEditNet()">
@@ -1601,6 +1839,10 @@ function openEditStudent(id) {
           <div class="form-group">
             <label>الخصم (د.ك)</label>
             <input type="number" id="esDiscount" value="${s.discount||0}" step="0.001" oninput="calcEditNet()">
+          </div>
+          <div class="form-group">
+            <label>قضاء يوم (د.ك)</label>
+            <input type="number" id="esDayUse" value="0" readonly>
           </div>
           <div class="form-group">
             <label>الصافي (د.ك)</label>
@@ -1611,6 +1853,15 @@ function openEditStudent(id) {
         <div class="form-group">
           <label>سبب الخصم</label>
           <input type="text" id="esDiscountReason" value="${s.discountReason||''}">
+        </div>
+
+        <!-- Day-use (قضاء يوم) — amounts already collected for single trial/drop-in
+             days; each entry is subtracted from the fees so the remaining
+             installments only cover what's left of the month. -->
+        <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px">🗓️ قضاء يوم (يُخصم من الرسوم)</div>
+          <div id="esDayUseRows"></div>
+          <button class="btn btn-outline btn-sm" type="button" onclick="addDayUseRow('es')">➕ إضافة قضاء يوم</button>
         </div>
 
         <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:12px">
@@ -1670,6 +1921,11 @@ function openEditStudent(id) {
         morningDiv.style.display = 'none';
       }
     }
+    // نادي صيفي والمسائي: السن بدل المرحلة — العقود فقط بيفضل بالمرحلة
+    const useAge = usesAgeField(branch);
+    document.getElementById('esGrade').style.display = useAge ? 'none' : '';
+    document.getElementById('esAge').style.display   = useAge ? '' : 'none';
+    document.getElementById('esGradeLabel').textContent = useAge ? 'السن' : 'المرحلة *';
   }
   document.getElementById('esBranch').addEventListener('change', toggleEditBranchFields);
   toggleEditBranchFields();
@@ -1681,9 +1937,12 @@ function openEditStudent(id) {
 }
 
 function calcEditNet() {
-  const fees = parseFloat(document.getElementById('esFees').value) || 0;
-  const disc = parseFloat(document.getElementById('esDiscount').value) || 0;
-  const net  = Math.max(0, fees - disc);
+  const fees   = parseFloat(document.getElementById('esFees').value) || 0;
+  const disc   = parseFloat(document.getElementById('esDiscount').value) || 0;
+  const dayUse = getDayUseTotal('es');
+  const dayUseEl = document.getElementById('esDayUse');
+  if (dayUseEl) dayUseEl.value = dayUse.toFixed(3);
+  const net  = Math.max(0, fees - disc - dayUse);
   document.getElementById('esNet').value = net.toFixed(3);
   updateInstTotal();
 }
@@ -1703,11 +1962,16 @@ function saveEditStudent(id) {
   // Update student record
   const esBranch = document.getElementById('esBranch').value;
   const esIsEvening = isEveningBranch(esBranch);
+  // نادي صيفي والمسائي يستخدموا السن بدل المرحلة — بيتخزن في نفس عمود grade
+  const esAgeVal = document.getElementById('esAge')?.value;
+  const esGrade = usesAgeField(esBranch)
+    ? (esAgeVal ? esAgeVal + ' سنوات' : '')
+    : document.getElementById('esGrade').value;
   const updated = {
     ...students[idx],
     name,
     branch:           esBranch,
-    grade:            document.getElementById('esGrade').value,
+    grade:            esGrade,
     phone1,
     phone2:           document.getElementById('esPhone2').value.trim(),
     dob:              document.getElementById('esDob').value,
@@ -2144,3 +2408,5 @@ window.viewRefundAttachment    = viewRefundAttachment;
 window.importStudentsExcel     = importStudentsExcel;
 window.downloadStudentTemplate = downloadStudentTemplate;
 window.confirmImportStudents   = confirmImportStudents;
+window.editInstallment         = editInstallment;
+window.saveEditInstallment     = saveEditInstallment;

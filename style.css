@@ -103,6 +103,8 @@ body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: var(--bg)
 .form-group textarea:focus { outline: none; border-color: var(--primary); }
 .form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.form-row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .form-row-4 { grid-template-columns: 1fr 1fr; } }
 input[readonly] { background: #f5f5f5 !important; }
 
 /* ===== BUTTONS ===== */

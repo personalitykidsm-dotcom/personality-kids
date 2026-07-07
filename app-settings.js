@@ -924,9 +924,6 @@ function importClothesFromExcel(e) {
   const file = e.target.files[0]; if (!file) return;
   const allBranches = ['esh','sol','mat','esh_e','sol_e','mat_e'];
   readExcelFile(file, rows => {
-    const types  = invGetTypes();
-    const main   = invGetMainStock();
-    const branch = invGetBranchStock();
     let addedMain = 0, addedBranch = 0, skipped = 0;
 
     rows.forEach(r => {
@@ -941,25 +938,21 @@ function importClothesFromExcel(e) {
       const branchKey = _BRANCH_MAP[branchRaw] || branchRaw;
       const isMain = branchRaw === 'main' || branchRaw === '' || !allBranches.includes(branchKey);
 
-      // أضف النوع إن لم يكن موجوداً
-      if (!types.includes(type)) {
-        types.push(type);
-        main.push({type, qty: 0});
-        allBranches.forEach(b => branch.push({type, branch:b, qty:0, minQty}));
+      // أضف النوع (صفوف في جدول clothes) إن لم يكن موجوداً
+      if (!invGetTypes().includes(type)) {
+        DB.add('clothes', {id: DB.nextId('clothes','C'), name:type, size:'', branch:'main', qty:0, minQty});
+        allBranches.forEach(b => DB.add('clothes', {id: DB.nextId('clothes','C'), name:type, size:'', branch:b, qty:0, minQty}));
       }
 
       if (isMain) {
-        const idx = main.findIndex(i => i.type === type);
-        if (idx >= 0) { main[idx].qty += qty; addedMain++; }
+        const row = invFindMainRow(type);
+        if (row) { DB.update('clothes', row.id, {qty:(row.qty||0)+qty}); addedMain++; }
       } else if (allBranches.includes(branchKey)) {
-        const idx = branch.findIndex(i => i.type === type && i.branch === branchKey);
-        if (idx >= 0) { branch[idx].qty += qty; branch[idx].minQty = minQty; addedBranch++; }
+        const row = invFindBranchRow(branchKey, type);
+        if (row) { DB.update('clothes', row.id, {qty:(row.qty||0)+qty, minQty}); addedBranch++; }
       } else { skipped++; }
     });
 
-    DB.set('invTypes', types);
-    invSaveMain(main);
-    invSaveBranch(branch);
     e.target.value = '';
     showToast(`✅ تم: ${addedMain} صنف للمخزن الرئيسي، ${addedBranch} للفروع${skipped?' — تجاهل '+skipped+' صف':''}`);
   });

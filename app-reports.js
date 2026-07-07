@@ -120,7 +120,7 @@ function renderFeesTable(statusFilter) {
 
     return `<tr>
       <td><b>${s.name}</b></td>
-      <td><span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span></td>
+      <td><span class="badge ${branchInfo(s.branch).badge}">${branchInfo(s.branch).name}</span></td>
       <td>${fmtKD(s.fees)}</td><td>${fmtKD(s.discount)}</td>
       <td><b>${fmtKD(s.net)}</b></td>
       <td style="color:var(--primary)">${fmtKD(s.paid)}</td>
@@ -435,27 +435,56 @@ function renderPlanReport() {
 // ============================================================
 
 // --- Data helpers ---
+// Main + branch stock quantities live in the real `clothes` Supabase table
+// (one row per type/branch). Dispatch log, requests log, sizes and type
+// defaults remain small settings blobs since they're just history/config.
 const INV_TYPES_DEFAULT = ['قميص','بنطلون','فستان','جاكيت','بيجاما','تيشيرت','شورت'];
 const INV_STAGES = ['الحضانة (0-2)','KG1','KG2'];
 const INV_MIN_QTY = 10;
+const INV_BRANCHES = ['esh','sol','mat','esh_e','sol_e','mat_e'];
 
-function invGetTypes()       { return DB.get('invTypes')       || INV_TYPES_DEFAULT; }
+function invAllRows()        { return DB.all('clothes'); }
+function invGetTypes()       {
+  const t = invAllRows().filter(r=>r.branch==='main').map(r=>r.name);
+  return t.length ? t : (DB.get('invTypes') || INV_TYPES_DEFAULT);
+}
 function invGetMainStock()   {
-  return DB.get('invMainStock') || invGetTypes().map((t,i) => ({type:t, qty:80+i*15}));
+  return invAllRows().filter(r=>r.branch==='main')
+    .map(r=>({_id:r.id, type:r.name, qty:r.qty||0}));
 }
 function invGetBranchStock() {
-  return DB.get('invBranchStock') || ['esh','sol','mat','esh_e','sol_e','mat_e'].flatMap(b =>
-    invGetTypes().map((t,i) => ({type:t, branch:b, qty:20+i*3, minQty:INV_MIN_QTY}))
-  );
+  return invAllRows().filter(r=>r.branch && r.branch!=='main')
+    .map(r=>({_id:r.id, type:r.name, branch:r.branch, qty:r.qty||0, minQty:r.minQty||INV_MIN_QTY}));
 }
+function invFindMainRow(type)          { return invAllRows().find(r=>r.branch==='main'&&r.name===type); }
+function invFindBranchRow(branch,type) { return invAllRows().find(r=>r.branch===branch&&r.name===type); }
+
 function invGetDispatch()    { return DB.get('invDispatch')    || []; }
 function invGetRequests()    { return DB.get('invRequests')    || []; }
 function invGetSizes()       { return DB.get('invSizes') || ['2 سنوات','3 سنوات','4 سنوات','5 سنوات','6 سنوات','7 سنوات','8 سنوات']; }
 function invSaveSizes(arr)   { DB.set('invSizes', arr); }
-function invSaveMain(d)      { DB.set('invMainStock', d); }
-function invSaveBranch(d)    { DB.set('invBranchStock', d); }
 function invSaveDispatch(d)  { DB.set('invDispatch', d); }
 function invSaveRequests(d)  { DB.set('invRequests', d); }
+
+// One-time migration: move legacy settings-based stock (invMainStock /
+// invBranchStock) into real rows in the `clothes` table. Runs once on boot;
+// no-ops once the clothes table already has rows.
+function migrateClothesInventoryToTable() {
+  if (invAllRows().length) return;
+  const legacyMain   = DB.get('invMainStock');
+  const legacyBranch = DB.get('invBranchStock');
+  if (!legacyMain && !legacyBranch) return;
+  const rows = [];
+  (legacyMain||[]).forEach(i => rows.push({
+    id: 'C'+String(rows.length+1).padStart(3,'0'),
+    name: i.type, size:'', branch:'main', qty: i.qty||0, minQty: INV_MIN_QTY
+  }));
+  (legacyBranch||[]).forEach(i => rows.push({
+    id: 'C'+String(rows.length+1).padStart(3,'0'),
+    name: i.type, size:'', branch: i.branch, qty: i.qty||0, minQty: i.minQty||INV_MIN_QTY
+  }));
+  if (rows.length) DB.addBulk('clothes', rows);
+}
 
 function invIsAdmin()   { return currentUser?.role === 'admin' || currentUser?.role === 'super_admin'; }
 function invBranchKey() { return currentUser?.branch || 'esh'; }
@@ -528,7 +557,7 @@ function pkBuildAdminDash() {
     const c = pct>60?'var(--primary)':pct>30?'var(--accent)':'var(--danger)';
     return `<div style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-        <span>فرع ${BRANCHES[b].name}</span><span style="color:var(--text-muted)">${tot} قطعة (${pct}%)</span>
+        <span>فرع ${branchInfo(b).name}</span><span style="color:var(--text-muted)">${tot} قطعة (${pct}%)</span>
       </div>
       <div style="background:#e0e0e0;border-radius:4px;height:7px;overflow:hidden">
         <div style="height:7px;border-radius:4px;width:${pct}%;background:${c}"></div>
@@ -596,40 +625,23 @@ function pkBuildMainStock() {
 function pkEditType(oldType) {
   const newType = prompt('تعديل اسم النوع:', oldType);
   if (!newType || newType === oldType) return;
-  // Update types list
-  const types = invGetTypes();
-  const ti = types.indexOf(oldType);
-  if (ti >= 0) types[ti] = newType;
-  DB.set('invTypes', types);
-  // Update main stock
-  const main = invGetMainStock();
-  main.forEach(i => { if (i.type === oldType) i.type = newType; });
-  invSaveMain(main);
-  // Update branch stock
-  const bs = invGetBranchStock();
-  bs.forEach(i => { if (i.type === oldType) i.type = newType; });
-  invSaveBranch(bs);
+  // Rename across every row (main + all branches) in the clothes table
+  invAllRows().filter(r=>r.name===oldType).forEach(r => DB.update('clothes', r.id, {name:newType}));
   pkShowTab('pkmain');
   showToast('✅ تم تعديل اسم النوع إلى: ' + newType);
 }
 
 function pkDeleteType(type) {
   if (!confirm(`هل تريد حذف نوع "${type}" من المخزن الرئيسي وجميع الفروع؟`)) return;
-  // Remove from types
-  const types = invGetTypes().filter(t => t !== type);
-  DB.set('invTypes', types);
-  // Remove from main stock
-  invSaveMain(invGetMainStock().filter(i => i.type !== type));
-  // Remove from branch stock
-  invSaveBranch(invGetBranchStock().filter(i => i.type !== type));
+  invAllRows().filter(r=>r.name===type).forEach(r => DB.remove('clothes', r.id));
   pkShowTab('pkmain');
   showToast('🗑️ تم حذف النوع: ' + type);
 }
 
 function pkDeleteBranchItem(branch, type) {
   if (!confirm(`هل تريد إزالة "${type}" من فرع ${BRANCHES[branch]?.name}؟`)) return;
-  const bs = invGetBranchStock().filter(i => !(i.branch === branch && i.type === type));
-  invSaveBranch(bs);
+  const row = invFindBranchRow(branch, type);
+  if (row) DB.remove('clothes', row.id);
   pkShowTab('pkbranches');
   showToast(`🗑️ تم إزالة ${type} من فرع ${BRANCHES[branch]?.name}`);
 }
@@ -637,10 +649,9 @@ function pkDeleteBranchItem(branch, type) {
 function pkAddToMain(type) {
   const qty = parseInt(document.getElementById('pkaq-'+type)?.value)||0;
   if (qty <= 0) { showToast('⚠️ أدخل كمية صالحة'); return; }
-  const main = invGetMainStock();
-  const idx = main.findIndex(i=>i.type===type);
-  if (idx >= 0) main[idx].qty += qty;
-  invSaveMain(main);
+  const row = invFindMainRow(type);
+  if (!row) return;
+  DB.update('clothes', row.id, {qty: (row.qty||0) + qty});
   pkShowTab('pkmain');
   showToast(`✅ تمت إضافة ${qty} قطعة من ${type}`);
 }
@@ -669,15 +680,11 @@ function pkSaveNewType() {
   const name = document.getElementById('invNewType').value.trim();
   const qty  = parseInt(document.getElementById('invNewTypeQty').value)||0;
   if (!name) { showToast('⚠️ أدخل اسم النوع'); return; }
-  const types = invGetTypes();
-  if (types.includes(name)) { showToast('هذا النوع موجود بالفعل'); return; }
-  types.push(name);
-  DB.set('invTypes', types);
-  const main = invGetMainStock(); main.push({type:name, qty});
-  invSaveMain(main);
-  const branch = invGetBranchStock();
-  ['esh','sol','mat','esh_e','sol_e','mat_e'].forEach(b => branch.push({type:name, branch:b, qty:0, minQty:INV_MIN_QTY}));
-  invSaveBranch(branch);
+  if (invGetTypes().includes(name)) { showToast('هذا النوع موجود بالفعل'); return; }
+  DB.add('clothes', {id: DB.nextId('clothes','C'), name, size:'', branch:'main', qty, minQty: INV_MIN_QTY});
+  INV_BRANCHES.forEach(b => {
+    DB.add('clothes', {id: DB.nextId('clothes','C'), name, size:'', branch:b, qty:0, minQty: INV_MIN_QTY});
+  });
   closeModal('modal-inv-type');
   pkShowTab('pkmain');
   showToast('✅ تمت إضافة النوع: '+name);
@@ -701,7 +708,7 @@ function pkBuildBranches() {
           <button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="pkDeleteBranchItem('${b}','${i.type}')">🗑️</button>
         </td></tr>`;
     }).join('');
-    return `<div style="${pks}"><b style="font-size:14px">🏪 فرع ${BRANCHES[b].name} — ${tot} قطعة</b>
+    return `<div style="${pks}"><b style="font-size:14px">🏪 فرع ${branchInfo(b).name} — ${tot} قطعة</b>
       <div class="table-wrap" style="margin-top:12px"><table>
         <thead><tr><th>النوع</th><th>الكمية</th><th>الحد الأدنى</th><th>الحالة</th><th>إجراء</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -711,19 +718,16 @@ function pkBuildBranches() {
 }
 
 function pkTransferToBranch(branch, type) {
-  const qty = parseInt(prompt(`كمية التحويل من المخزن الرئيسي إلى فرع ${BRANCHES[branch].name} (${type}):`))||0;
+  const qty = parseInt(prompt(`كمية التحويل من المخزن الرئيسي إلى فرع ${branchInfo(branch).name} (${type}):`))||0;
   if (qty <= 0) return;
-  const main = invGetMainStock();
-  const mIdx = main.findIndex(i=>i.type===type);
-  if (mIdx<0 || main[mIdx].qty < qty) { showToast('⚠️ الكمية أكبر من المتاح في المخزن الرئيسي'); return; }
-  main[mIdx].qty -= qty;
-  invSaveMain(main);
-  const bs = invGetBranchStock();
-  const bIdx = bs.findIndex(i=>i.branch===branch&&i.type===type);
-  if (bIdx>=0) bs[bIdx].qty += qty;
-  invSaveBranch(bs);
+  const mainRow = invFindMainRow(type);
+  if (!mainRow || mainRow.qty < qty) { showToast('⚠️ الكمية أكبر من المتاح في المخزن الرئيسي'); return; }
+  DB.update('clothes', mainRow.id, {qty: mainRow.qty - qty});
+  const branchRow = invFindBranchRow(branch, type);
+  if (branchRow) DB.update('clothes', branchRow.id, {qty: (branchRow.qty||0) + qty});
+  else DB.add('clothes', {id: DB.nextId('clothes','C'), name:type, size:'', branch, qty, minQty: INV_MIN_QTY});
   pkShowTab('pkbranches');
-  showToast(`✅ تم تحويل ${qty} قطعة من ${type} إلى فرع ${BRANCHES[branch].name}`);
+  showToast(`✅ تم تحويل ${qty} قطعة من ${type} إلى فرع ${branchInfo(branch).name}`);
 }
 
 // Admin: Requests
@@ -759,15 +763,12 @@ function pkApproveReq(id) {
   const reqs = invGetRequests();
   const req = reqs.find(r=>r.id===id);
   if (!req) return;
-  const main = invGetMainStock();
-  const mIdx = main.findIndex(i=>i.type===req.type);
-  if (mIdx<0 || main[mIdx].qty < req.qty) { showToast('⚠️ الكمية غير كافية في المخزن الرئيسي'); return; }
-  main[mIdx].qty -= req.qty;
-  invSaveMain(main);
-  const bs = invGetBranchStock();
-  const bIdx = bs.findIndex(i=>i.branch===req.branch&&i.type===req.type);
-  if (bIdx>=0) bs[bIdx].qty += req.qty;
-  invSaveBranch(bs);
+  const mainRow = invFindMainRow(req.type);
+  if (!mainRow || mainRow.qty < req.qty) { showToast('⚠️ الكمية غير كافية في المخزن الرئيسي'); return; }
+  DB.update('clothes', mainRow.id, {qty: mainRow.qty - req.qty});
+  const branchRow = invFindBranchRow(req.branch, req.type);
+  if (branchRow) DB.update('clothes', branchRow.id, {qty: (branchRow.qty||0) + req.qty});
+  else DB.add('clothes', {id: DB.nextId('clothes','C'), name:req.type, size:'', branch:req.branch, qty:req.qty, minQty: INV_MIN_QTY});
   reqs.find(r=>r.id===id).status = 'approved';
   invSaveRequests(reqs);
   pkShowTab('pkrequests');
@@ -898,11 +899,9 @@ function pkSubmitDispatch() {
   const date  = document.getElementById('pkd-date')?.value;
   if (!child) { showToast('⚠️ أدخل اسم الطفل/ة'); return; }
   if (qty <= 0) { showToast('⚠️ أدخل كمية صالحة'); return; }
-  const bs = invGetBranchStock();
-  const idx = bs.findIndex(i=>i.branch===b&&i.type===type);
-  if (idx<0||bs[idx].qty<qty) { showToast('⚠️ الكمية المتاحة غير كافية'); return; }
-  bs[idx].qty -= qty;
-  invSaveBranch(bs);
+  const row = invFindBranchRow(b, type);
+  if (!row || row.qty < qty) { showToast('⚠️ الكمية المتاحة غير كافية'); return; }
+  DB.update('clothes', row.id, {qty: row.qty - qty});
   const log = invGetDispatch();
   log.push({id:`D${Date.now()}`, branch:b, childName:child, stage, type, size, qty, date});
   invSaveDispatch(log);
@@ -1307,7 +1306,7 @@ function exportStudentsExcel() {
       'الكود': s.id,
       'الاسم': s.name,
       'المرحلة': gradeLabel[s.grade] || (s.grade === 'nursery' ? 'حضانة' : s.grade),
-      'الفرع': BRANCHES[s.branch].name,
+      'الفرع': branchInfo(s.branch).name,
       'هاتف 1': s.phone1||'',
       'هاتف 2': s.phone2||'',
       'تاريخ الميلاد': fmtDate(s.dob),
@@ -1334,7 +1333,7 @@ function exportFeesExcel() {
   const data = filterByBranch(DB.all('students')).map(s => {
     const refunded = allRefunds.filter(r=>r.studentId===s.id).reduce((sum,r)=>sum+(parseFloat(r.amount)||0),0);
     return {
-      'الطالب': s.name, 'الفرع': BRANCHES[s.branch].name,
+      'الطالب': s.name, 'الفرع': branchInfo(s.branch).name,
       'الرسوم الإجمالية': s.fees, 'الخصم': s.discount,
       'الصافي': s.net, 'المدفوع': s.paid,
       'المرتجع': refunded,
@@ -1353,7 +1352,7 @@ function exportRefundsExcel() {
     return {
       'كود المرتجع': r.id,
       'الطالب': s.name||'',
-      'الفرع': s.branch ? BRANCHES[s.branch].name : '',
+      'الفرع': s.branch ? branchInfo(s.branch).name : '',
       'المبلغ المرتجع': r.amount,
       'التاريخ': fmtDate(r.date),
       'السبب': r.reason||''
@@ -1368,7 +1367,7 @@ function exportPaymentsExcel() {
   const data = installs.map(i => {
     const s = students.find(x => x.id === i.studentId) || {};
     return {
-      'الطالب': s.name||'', 'الفرع': s.branch ? BRANCHES[s.branch].name : '',
+      'الطالب': s.name||'', 'الفرع': s.branch ? branchInfo(s.branch).name : '',
       'رقم القسط': i.num, 'المبلغ': i.amount,
       'تاريخ الدفع': fmtDate(i.paidDate), 'طريقة الدفع': i.method||''
     };
@@ -1383,7 +1382,7 @@ function exportPlanExcel() {
     const s    = students.find(x => x.id === i.studentId) || {};
     const late = i.status === 'pending' && daysUntil(i.dueDate) < 0;
     return {
-      'الطالب': s.name||'', 'الفرع': s.branch ? BRANCHES[s.branch].name : '',
+      'الطالب': s.name||'', 'الفرع': s.branch ? branchInfo(s.branch).name : '',
       'رقم القسط': i.num, 'المبلغ': i.amount,
       'تاريخ الاستحقاق': fmtDate(i.dueDate), 'تاريخ الدفع': fmtDate(i.paidDate),
       'الحالة': i.status === 'paid' ? 'مدفوع' : late ? 'متأخر' : 'قادم'
@@ -1423,7 +1422,7 @@ function printFeesReport() {
   const data = filterByBranch(DB.all('students'));
   printReport('تقرير الرسوم والأقساط',
     ['الطالب','الفرع','الصافي','المدفوع','المتبقي','نسبة السداد'],
-    data.map(s => [s.name, BRANCHES[s.branch].name,
+    data.map(s => [s.name, branchInfo(s.branch).name,
       fmtKD(s.net), fmtKD(s.paid), fmtKD(s.net-s.paid),
       s.net>0 ? Math.round(s.paid/s.net*100)+'%' : '0%']));
 }
@@ -1435,7 +1434,7 @@ function printPaymentsReport() {
     ['الطالب','الفرع','تاريخ الدفع','المبلغ','الطريقة'],
     installs.map(i => {
       const s = students.find(x => x.id === i.studentId)||{};
-      return [s.name||'', s.branch ? BRANCHES[s.branch].name : '',
+      return [s.name||'', s.branch ? branchInfo(s.branch).name : '',
         fmtDate(i.paidDate), fmtKD(i.amount), i.method||'—'];
     }));
 }
@@ -1448,7 +1447,7 @@ function printPlanReport() {
     installs.map(i => {
       const s    = students.find(x => x.id === i.studentId)||{};
       const late = i.status==='pending' && daysUntil(i.dueDate)<0;
-      return [s.name||'', s.branch ? BRANCHES[s.branch].name : '',
+      return [s.name||'', s.branch ? branchInfo(s.branch).name : '',
         'قسط '+i.num, fmtKD(i.amount),
         fmtDate(i.dueDate), fmtDate(i.paidDate),
         i.status==='paid'?'مدفوع':i.status==='partial'?'جزئي':late?'متأخر':'قادم'];
@@ -1502,7 +1501,7 @@ function lookupStudentById(sid) {
         <div>
           <span style="font-size:18px;font-weight:700">${s.name}</span>
           <span style="margin-right:8px;font-size:12px;color:var(--text-muted)">${s.id}</span>
-          <span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span>
+          <span class="badge ${branchInfo(s.branch).badge}">${branchInfo(s.branch).name}</span>
           <span class="badge" style="margin-right:4px">${gradeMap[s.grade]||s.grade}</span>
           <span class="badge ${st.cls}">${st.label}</span>
         </div>
@@ -1546,7 +1545,7 @@ function exportStudentExcel(sid) {
   const wb = XLSX.utils.book_new();
   // Sheet 1: Student info
   const infoSheet = XLSX.utils.json_to_sheet([{
-    'الكود': s.id, 'الاسم': s.name, 'الفرع': BRANCHES[s.branch].name,
+    'الكود': s.id, 'الاسم': s.name, 'الفرع': branchInfo(s.branch).name,
     'المرحلة': s.grade==='nursery'?'حضانة':s.grade,
     'هاتف 1': s.phone1, 'هاتف 2': s.phone2||'',
     'تاريخ الميلاد': fmtDate(s.dob), 'تاريخ المباشرة': fmtDate(s.startDate),

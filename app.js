@@ -27,6 +27,8 @@ const PAGE_TITLES = {
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
   await DB.init();
+  if (typeof migrateClothesInventoryToTable === 'function') migrateClothesInventoryToTable();
+  if (typeof migrateContractBranches === 'function') await migrateContractBranches();
   if (typeof applyNurseryBranding === 'function') applyNurseryBranding();
   initLogin();
   initNav();
@@ -79,11 +81,12 @@ function doLogin() {
 
   currentUser   = user;
   currentBranch = user.branch === 'all' ? 'all' : user.branch;
+  studentsSection = defaultStudentsSectionFor(user);
 
   // update topbar
   document.getElementById('avatarLetter').textContent = user.avatar;
   document.getElementById('currentUser').textContent  = user.name;
-  document.getElementById('branchLabel').textContent  = '• ' + BRANCHES[user.branch].name;
+  document.getElementById('branchLabel').textContent  = '• ' + branchInfo(user.branch).name;
 
   // restrict branch selector for supervisors
   const branchSel = document.getElementById('branchSelect');
@@ -127,6 +130,7 @@ function doLogout() {
   if (!confirm('هل تريد تسجيل الخروج؟')) return;
   currentUser = null;
   currentBranch = 'all';
+  studentsSection = 'contract';
   document.getElementById('avatarLetter').textContent = 'م';
   document.getElementById('currentUser').textContent = 'المدير';
   document.getElementById('branchLabel').textContent = '• كل الفروع';
@@ -292,7 +296,7 @@ function renderDashboard() {
     const pct  = bNet > 0 ? Math.round(bPaid / bNet * 100) : 0;
     const cls  = pct >= 90 ? 'badge-green' : pct >= 60 ? 'badge-orange' : 'badge-red';
     return `<tr>
-      <td><b>${BRANCHES[b].name}</b></td>
+      <td><b>${branchInfo(b).name}</b></td>
       <td>${bs.length}</td>
       <td><b>${fmtKD(bPaid)}</b></td>
       <td>${fmtKD(bNet - bPaid)}</td>
@@ -482,13 +486,59 @@ function renderDashboard() {
 // ============================================================
 let studentSearchQuery = '';
 
+// ثلاث أقسام مستقلة تمامًا عن بعض: عقود (esh_c/sol_c/mat_c) — نادي صيفي
+// (esh/sol/mat فقط) — مسائي (esh_e/sol_e/mat_e، فرع قائم بذاته زي ما كان من الأول)
+function sectionBranchesFor(section) {
+  return section === 'summer' ? SUMMER_BRANCHES : section === 'evening' ? EVENING_BRANCHES : CONTRACT_BRANCHES;
+}
+
+function defaultStudentsSectionFor(user) {
+  if (!user || isAdmin(user)) return 'contract';
+  if (EVENING_BRANCHES.includes(user.branch)) return 'evening';
+  return isSummerBranch(user.branch) ? 'summer' : 'contract';
+}
+
+let studentsSection = defaultStudentsSectionFor(currentUser);
+
+function setStudentsSection(section) {
+  studentsSection = section;
+  if (isAdmin(currentUser)) {
+    currentBranch = 'all'; // "الكل" الآن يعني كل مواقع القسم المختار
+  } else {
+    // branch supervisors عند فرع صباحي بيتنقلوا بين نادي صيفي/عقود بنفس الموقع؛
+    // المسائي فرع مستقل، مفيش تبديل ليه أصلاً (الزرار مش هيظهر)
+    const pair = branchSectionPair(currentUser?.branch);
+    if (!pair) return;
+    currentBranch = section === 'contract' ? pair.contract : pair.summer;
+  }
+  const branchSel = document.getElementById('branchSelect');
+  if (branchSel) branchSel.value = currentBranch;
+  showArchivedStudents = false;
+  studentSearchQuery = '';
+  renderStudents();
+}
+
 function renderStudents() {
   const container = document.getElementById('studentsFilter');
+
+  const userPair = currentUser ? branchSectionPair(currentUser.branch) : null;
+  const canToggleSection = isAdmin(currentUser) || !!userPair;
+
+  const sectionToggleHtml = canToggleSection ? `
+    <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
+      <span class="filter-chip ${studentsSection==='contract'?'active':''}" style="font-weight:700" onclick="setStudentsSection('contract')">📄 طلاب عقود</span>
+      <span class="filter-chip ${studentsSection==='summer'?'active':''}" style="font-weight:700" onclick="setStudentsSection('summer')">☀️ طلاب نادي صيفي</span>
+      ${isAdmin(currentUser) ? `<span class="filter-chip ${studentsSection==='evening'?'active':''}" style="font-weight:700" onclick="setStudentsSection('evening')">🌙 طلاب مسائي</span>` : ''}
+    </div>` : '';
+
+  const sectionBranches = sectionBranchesFor(studentsSection);
+  const branchChipsHtml = isAdmin(currentUser)
+    ? ['all', ...sectionBranches].map(k => `<span class="filter-chip ${currentBranch===k?'active':''}" data-branch-chip onclick="setBranchFilter('${k}',this)">${BRANCHES[k].name}</span>`).join('')
+    : `<span class="filter-chip active">${BRANCHES[currentBranch]?.name || ''}</span>`;
+
   container.innerHTML = `
-    ${isAdmin(currentUser)
-      ? Object.entries(BRANCHES).map(([k,v]) => `<span class="filter-chip ${currentBranch===k?'active':''}" onclick="setBranchFilter('${k}',this)">${v.name}</span>`).join('')
-      : `<span class="filter-chip active">${BRANCHES[currentBranch]?.name || ''}</span>`
-    }
+    ${sectionToggleHtml}
+    ${branchChipsHtml}
     <span class="filter-chip" id="gradeAll" onclick="gradeFilter('all',this)">كل المراحل</span>
     <span class="filter-chip" onclick="gradeFilter('nursery',this)">حضانة</span>
     <span class="filter-chip" onclick="gradeFilter('KG1',this)">KG1</span>
@@ -523,11 +573,9 @@ function setBranchFilter(branch, el) {
   currentBranch = branch;
   document.getElementById('branchSelect').value = branch;
   renderStudentsTable(activeGrade);
-  // update chips highlight
-  el.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c => {
-    if (['كل الفروع','اشبيلية','الصليبخات','المطلاع'].includes(c.textContent))
-      c.classList.remove('active');
-  });
+  // update chips highlight — scoped via data-branch-chip so it never touches
+  // the section toggle (طلاب عقود/نادي صيفي) or grade chips sitting in the same bar
+  el.closest('.filter-bar').querySelectorAll('.filter-chip[data-branch-chip]').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
 }
 
@@ -542,6 +590,10 @@ function toggleArchivedStudents(btn) {
 
 function renderStudentsTable(grade) {
   let list = filterByBranch(DB.all('students'));
+  // keep the three sections (عقود / نادي صيفي / مسائي) fully separate regardless
+  // of the currentBranch value, so nothing leaks between tabs
+  const sectionSet = sectionBranchesFor(studentsSection);
+  list = list.filter(s => sectionSet.includes(s.branch));
   if (grade !== 'all') list = list.filter(s => s.grade === grade);
   // Search filter
   if (studentSearchQuery && studentSearchQuery.trim()) {
@@ -602,7 +654,7 @@ function renderStudentsTable(grade) {
       <td style="color:var(--text-muted)">${s.id}</td>
       <td><b>${s.name}</b></td>
       <td><span class="badge ${gradeBadge[s.grade]||'badge-gray'}">${gradeLabel[s.grade]||s.grade}</span></td>
-      <td><span class="badge ${BRANCHES[s.branch].badge}">${BRANCHES[s.branch].name}</span></td>
+      <td><span class="badge ${branchInfo(s.branch).badge}">${branchInfo(s.branch).name}</span></td>
       <td>${s.phone1}</td>
       <td>${s.phone2||'—'}</td>
       <td>${fmtDate(s.dob)}</td>
@@ -763,6 +815,14 @@ function confirmRenew(studentId) {
 }
 function filterByBranch(arr) {
   if (currentUser && !isAdmin(currentUser)) {
+    // supervisors at a morning location can switch between their نادي صيفي
+    // and عقود codes (via setStudentsSection) — honor that if currentBranch is
+    // currently set to either half of their pair, otherwise fall back to their
+    // assigned branch exactly as before (evening accounts always take this path)
+    const pair = branchSectionPair(currentUser.branch);
+    if (pair && (currentBranch === pair.summer || currentBranch === pair.contract)) {
+      return arr.filter(i => i.branch === currentBranch);
+    }
     return arr.filter(i => i.branch === currentUser.branch);
   }
   if (!currentBranch || currentBranch === 'all') return arr;

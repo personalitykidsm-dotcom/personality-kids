@@ -105,7 +105,7 @@ function renderHRTable(b) {
       <td style="color:var(--text-muted)">${e.id}</td>
       <td><b>${e.name}</b></td>
       <td>${e.role}</td>
-      <td><span class="badge ${BRANCHES[e.branch].badge}">${BRANCHES[e.branch].name}</span></td>
+      <td><span class="badge ${branchInfo(e.branch).badge}">${branchInfo(e.branch).name}</span></td>
       <td>${e.nationality||'—'}</td>
       <td>${e.phone||'—'}</td>
       <td><b>${fmtKD((e.salary||0)+(e.allowance||0))}</b></td>
@@ -473,7 +473,7 @@ function renderAttTable() {
   const emps = filterByBranch(DB.all('employees'));
   const rows = emps.map(e => `<tr>
     <td><b>${e.name}</b></td>
-    <td><span class="badge ${BRANCHES[e.branch].badge}">${BRANCHES[e.branch].name}</span></td>
+    <td><span class="badge ${branchInfo(e.branch).badge}">${branchInfo(e.branch).name}</span></td>
     <td>${e.role}</td>
     <td>
       <select class="inst-input att-status" data-id="${e.id}" style="width:120px">
@@ -503,7 +503,7 @@ function exportAttExcel() {
     const emp  = DB.all('employees').find(e => e.id === id);
     const time = document.querySelector(`.att-time[data-id="${id}"]`)?.value || '';
     const note = document.querySelector(`.att-note[data-id="${id}"]`)?.value || '';
-    if (emp) rows.push({ 'الموظف': emp.name, 'الفرع': BRANCHES[emp.branch].name,
+    if (emp) rows.push({ 'الموظف': emp.name, 'الفرع': branchInfo(emp.branch).name,
       'الوظيفة': emp.role, 'الحالة': sel.value, 'وقت الحضور': time, 'ملاحظة': note });
   });
   xlsxExport(rows, 'سجل_الحضور_' + (document.getElementById('attDate')?.value||''));
@@ -516,7 +516,7 @@ function renderSalaryTable() {
     const net = (e.salary||0) + (e.allowance||0);
     return `<tr>
       <td><b>${e.name}</b></td>
-      <td><span class="badge ${BRANCHES[e.branch].badge}">${BRANCHES[e.branch].name}</span></td>
+      <td><span class="badge ${branchInfo(e.branch).badge}">${branchInfo(e.branch).name}</span></td>
       <td>${e.role}</td>
       <td>${fmtKD(e.salary)}</td>
       <td>${fmtKD(e.allowance)}</td>
@@ -541,7 +541,7 @@ function markSalaryPaid(id) {
 function exportHRExcel() {
   const data = filterByBranch(DB.all('employees')).map(e => ({
     'الكود': e.id, 'الاسم': e.name, 'الوظيفة': e.role,
-    'الفرع': BRANCHES[e.branch].name, 'الجنسية': e.nationality||'',
+    'الفرع': branchInfo(e.branch).name, 'الجنسية': e.nationality||'',
     'الهاتف': e.phone||'', 'الراتب': e.salary, 'البدلات': e.allowance,
     'الصافي': (e.salary||0)+(e.allowance||0),
     'بداية العقد': fmtDate(e.contractStart), 'نهاية العقد': fmtDate(e.contractEnd),
@@ -553,7 +553,7 @@ function exportHRExcel() {
 
 function exportSalaryExcel() {
   const data = filterByBranch(DB.all('employees')).map(e => ({
-    'الموظف': e.name, 'الفرع': BRANCHES[e.branch].name, 'الوظيفة': e.role,
+    'الموظف': e.name, 'الفرع': branchInfo(e.branch).name, 'الوظيفة': e.role,
     'الراتب الأساسي': e.salary, 'البدلات': e.allowance,
     'الخصومات': 0, 'الصافي': (e.salary||0)+(e.allowance||0)
   }));
@@ -564,7 +564,7 @@ function printHRReport() {
   const data = filterByBranch(DB.all('employees'));
   printReport('تقرير شؤون العاملين',
     ['الاسم','الوظيفة','الفرع','الراتب','نهاية العقد','الحالة'],
-    data.map(e => [e.name, e.role, BRANCHES[e.branch].name,
+    data.map(e => [e.name, e.role, branchInfo(e.branch).name,
       fmtKD((e.salary||0)+(e.allowance||0)), fmtDate(e.contractEnd), empStatus(e).label]));
 }
 
@@ -572,6 +572,6 @@ function printSalaryReport() {
   const data = filterByBranch(DB.all('employees'));
   printReport('كشف الرواتب',
     ['الموظف','الفرع','الراتب','البدلات','الصافي'],
-    data.map(e => [e.name, BRANCHES[e.branch].name,
+    data.map(e => [e.name, branchInfo(e.branch).name,
       fmtKD(e.salary), fmtKD(e.allowance), fmtKD((e.salary||0)+(e.allowance||0))]));
 }
