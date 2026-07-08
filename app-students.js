@@ -180,7 +180,7 @@ function openAddStudent() {
 
         <div id="eveningSubscriptionFields" style="display:none">
           <hr style="margin:14px 0;border-color:var(--border)">
-          <div style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">🌙 بيانات اشتراك المسائي</div>
+          <div id="sSubFieldsTitle" style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">🌙 بيانات اشتراك المسائي</div>
           <div class="form-row">
             <div class="form-group">
               <label>نوع الاشتراك</label>
@@ -235,7 +235,10 @@ function openAddStudent() {
   // show evening / contract fields based on selected branch
   function toggleBranchFields() {
     const branch = document.getElementById('sBranch').value;
-    document.getElementById('eveningSubscriptionFields').style.display = isEveningBranch(branch) ? '' : 'none';
+    const showSub = isEveningBranch(branch) || isSummerBranch(branch);
+    document.getElementById('eveningSubscriptionFields').style.display = showSub ? '' : 'none';
+    const subTitle = document.getElementById('sSubFieldsTitle');
+    if (subTitle) subTitle.textContent = isSummerBranch(branch) ? '☀️ بيانات اشتراك النادي الصيفي الصباحي' : '🌙 بيانات اشتراك المسائي';
     const morningDiv = document.getElementById('morningContractFields');
     if (morningDiv) {
       if (isMorningBranch(branch)) {
@@ -727,6 +730,7 @@ async function saveStudent() {
   const id = document.getElementById('sId').value;
   const branch = document.getElementById('sBranch').value;
   const isEvening = isEveningBranch(branch);
+  const isSummer  = isSummerBranch(branch);
   // نادي صيفي والمسائي يستخدموا السن بدل المرحلة — بيتخزن في نفس عمود grade
   const ageVal = document.getElementById('sAge')?.value;
   const grade = usesAgeField(branch)
@@ -747,9 +751,9 @@ async function saveStudent() {
     net:             parseFloat(document.getElementById('sNet').value) || fees,
     paid:            0,
     notes:           document.getElementById('sNotes').value,
-    enrollStatus:    isEvening ? 'active' : '',
-    subscriptionType:isEvening ? (document.getElementById('sSubType')?.value || 'monthly') : '',
-    subscriptionEnd: isEvening ? (document.getElementById('sSubEnd')?.value || '') : '',
+    enrollStatus:    (isEvening || isSummer) ? 'active' : '',
+    subscriptionType:(isEvening || isSummer) ? (document.getElementById('sSubType')?.value || 'monthly') : '',
+    subscriptionEnd: (isEvening || isSummer) ? (document.getElementById('sSubEnd')?.value || '') : '',
     withdrawDate:    ''
   };
 
@@ -1809,9 +1813,9 @@ function openEditStudent(id) {
           </div>
         </div>
 
-        <div id="esEveningFields" style="display:${isEveningBranch(s.branch)?'block':'none'}">
+        <div id="esEveningFields" style="display:${(isEveningBranch(s.branch)||isSummerBranch(s.branch))?'block':'none'}">
           <hr style="margin:14px 0;border-color:var(--border)">
-          <div style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">🌙 بيانات اشتراك المسائي</div>
+          <div id="esSubFieldsTitle" style="font-size:13px;font-weight:700;color:#8b5cf6;margin-bottom:12px">${isSummerBranch(s.branch)?'☀️ بيانات اشتراك النادي الصيفي الصباحي':'🌙 بيانات اشتراك المسائي'}</div>
           <div class="form-row">
             <div class="form-group">
               <label>نوع الاشتراك</label>
@@ -1911,7 +1915,10 @@ function openEditStudent(id) {
   // toggle evening / contract fields when branch changes
   function toggleEditBranchFields() {
     const branch = document.getElementById('esBranch').value;
-    document.getElementById('esEveningFields').style.display = isEveningBranch(branch) ? 'block' : 'none';
+    const showSub = isEveningBranch(branch) || isSummerBranch(branch);
+    document.getElementById('esEveningFields').style.display = showSub ? 'block' : 'none';
+    const esSubTitle = document.getElementById('esSubFieldsTitle');
+    if (esSubTitle) esSubTitle.textContent = isSummerBranch(branch) ? '☀️ بيانات اشتراك النادي الصيفي الصباحي' : '🌙 بيانات اشتراك المسائي';
     const morningDiv = document.getElementById('esMorningContractFields');
     if (morningDiv) {
       if (isMorningBranch(branch)) {
@@ -1962,6 +1969,7 @@ function saveEditStudent(id) {
   // Update student record
   const esBranch = document.getElementById('esBranch').value;
   const esIsEvening = isEveningBranch(esBranch);
+  const esIsSummer  = isSummerBranch(esBranch);
   // نادي صيفي والمسائي يستخدموا السن بدل المرحلة — بيتخزن في نفس عمود grade
   const esAgeVal = document.getElementById('esAge')?.value;
   const esGrade = usesAgeField(esBranch)
@@ -1982,8 +1990,8 @@ function saveEditStudent(id) {
     net:              parseFloat(document.getElementById('esNet').value) || fees,
     discountReason:   document.getElementById('esDiscountReason').value,
     notes:            document.getElementById('esNotes').value,
-    subscriptionType: esIsEvening ? (document.getElementById('esSubType')?.value || students[idx].subscriptionType || 'monthly') : students[idx].subscriptionType,
-    subscriptionEnd:  esIsEvening ? (document.getElementById('esSubEnd')?.value || students[idx].subscriptionEnd || '') : students[idx].subscriptionEnd,
+    subscriptionType: (esIsEvening || esIsSummer) ? (document.getElementById('esSubType')?.value || students[idx].subscriptionType || 'monthly') : students[idx].subscriptionType,
+    subscriptionEnd:  (esIsEvening || esIsSummer) ? (document.getElementById('esSubEnd')?.value || students[idx].subscriptionEnd || '') : students[idx].subscriptionEnd,
   };
   students[idx] = updated;
   // Persist student update to Supabase (only columns that exist in the schema)

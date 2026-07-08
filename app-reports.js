@@ -289,12 +289,7 @@ function renderReports() {
         <div class="filter-bar" style="margin:0">
           ${(currentUser?.role==='super_admin'||currentUser?.role==='admin') ? `
           <span class="filter-chip active" onclick="repBranch(this,'all')">كل الفروع</span>
-          <span class="filter-chip" onclick="repBranch(this,'esh')">اشبيلية</span>
-          <span class="filter-chip" onclick="repBranch(this,'sol')">الصليبخات</span>
-          <span class="filter-chip" onclick="repBranch(this,'mat')">المطلاع</span>
-          <span class="filter-chip" onclick="repBranch(this,'esh_e')">اشبيلية مسائي</span>
-          <span class="filter-chip" onclick="repBranch(this,'sol_e')">الصليبخات مسائي</span>
-          <span class="filter-chip" onclick="repBranch(this,'mat_e')">المطلاع مسائي</span>
+          ${Object.entries(BRANCHES).filter(([k])=>k!=='all').map(([k,v])=>`<span class="filter-chip" onclick="repBranch(this,'${k}')">${v.name}</span>`).join('')}
           ` : `<span class="badge badge-green" style="padding:6px 12px">${BRANCHES[currentUser?.branch]?.name||''}</span>`}
           <input type="date" id="repFrom" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
           <input type="date" id="repTo"   style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">

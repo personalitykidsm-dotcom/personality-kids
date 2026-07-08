@@ -8,9 +8,9 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const BRANCHES = {
   all:    { name: 'كل الفروع',          badge: 'badge-gray'   },
   // نادي صيفي — نفس الفروع/البيانات الموجودة حالياً، بدون أي تغيير
-  esh:    { name: 'اشبيلية',            badge: 'badge-green'  },
-  sol:    { name: 'الصليبخات',          badge: 'badge-blue'   },
-  mat:    { name: 'المطلاع',            badge: 'badge-purple' },
+  esh:    { name: 'اشبيلية نادي صيفي صباحي',       badge: 'badge-green'  },
+  sol:    { name: 'الصليبخات نادي صيفي صباحي',     badge: 'badge-blue'   },
+  mat:    { name: 'المطلاع نادي صيفي صباحي',       badge: 'badge-purple' },
   esh_e:  { name: 'اشبيلية مسائي',     badge: 'badge-green'  },
   sol_e:  { name: 'الصليبخات مسائي',   badge: 'badge-blue'   },
   mat_e:  { name: 'المطلاع مسائي',     badge: 'badge-purple' },

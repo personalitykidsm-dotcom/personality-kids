@@ -282,22 +282,52 @@ function renderDashboard() {
       <div class="stat-label">العاملون</div></div></div>
   `;
 
-  // Branch summary table
+  // Branch summary table — all sections: نادي صيفي، مسائي، عقود
   const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin');
-  const branches = isAdmin
-    ? (currentBranch === 'all' ? ['esh','sol','mat','esh_e','sol_e','mat_e'] : [currentBranch])
-    : [currentUser.branch];
+  const ALL_DASH_BRANCHES = ['esh','sol','mat','esh_e','sol_e','mat_e','esh_c','sol_c','mat_c'];
+  // فرع صباحي (نادي صيفي أو عقود) لازم يبيّن الاثنين مع بعض في نفس الملخص — نفس
+  // الموقع، قسمين مستقلين — بدل ما يبيّن قسم واحد بس حسب حساب المستخدم/الفلتر الحالي
+  let branches;
+  if (isAdmin) {
+    if (currentBranch === 'all') {
+      branches = ALL_DASH_BRANCHES;
+    } else {
+      const pair = branchSectionPair(currentBranch);
+      branches = pair ? [pair.summer, pair.contract] : [currentBranch];
+    }
+  } else {
+    const pair = branchSectionPair(currentUser.branch);
+    branches = pair ? [pair.summer, pair.contract] : [currentUser.branch];
+  }
 
-  const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => s.branch === currentUser.branch);
+  const allStudents = isAdmin ? DB.all('students') : DB.all('students').filter(s => branches.includes(s.branch));
+
+  // موحّد لكل الأقسام: منسحب (أي فرع) — منتهي (نادي صيفي/مسائي فقط، حسب تاريخ انتهاء الاشتراك/الموسم)
+  // — العقود دايمًا صفر منتهي لأنه ما فيه تاريخ انتهاء مسجّل لهم حاليًا.
+  function _branchStatusCounts(bs) {
+    let active = 0, expired = 0, withdrawn = 0;
+    bs.forEach(s => {
+      if (s.enrollStatus === 'withdrawn') { withdrawn++; return; }
+      const canExpire = isEveningBranch(s.branch) || isSummerBranch(s.branch);
+      if (canExpire && s.subscriptionEnd && daysUntil(s.subscriptionEnd) < 0) { expired++; return; }
+      active++;
+    });
+    return { active, expired, withdrawn };
+  }
+
   const rows = branches.map(b => {
     const bs   = allStudents.filter(s => s.branch === b);
     const bPaid= bs.reduce((s,st) => s + st.paid, 0);
     const bNet = bs.reduce((s,st) => s + st.net,  0);
     const pct  = bNet > 0 ? Math.round(bPaid / bNet * 100) : 0;
     const cls  = pct >= 90 ? 'badge-green' : pct >= 60 ? 'badge-orange' : 'badge-red';
+    const { active, expired, withdrawn } = _branchStatusCounts(bs);
     return `<tr>
       <td><b>${branchInfo(b).name}</b></td>
       <td>${bs.length}</td>
+      <td><span class="badge badge-green">${active}</span></td>
+      <td><span class="badge badge-red">${expired}</span></td>
+      <td><span class="badge badge-gray">${withdrawn}</span></td>
       <td><b>${fmtKD(bPaid)}</b></td>
       <td>${fmtKD(bNet - bPaid)}</td>
       <td><span class="badge ${cls}">${pct}%</span></td>
@@ -305,7 +335,7 @@ function renderDashboard() {
   }).join('');
 
   document.getElementById('branchSummaryTable').innerHTML = `
-    <thead><tr><th>الفرع</th><th>الطلاب</th><th>المحصّل</th><th>المتبقي</th><th>نسبة السداد</th></tr></thead>
+    <thead><tr><th>الفرع</th><th>الإجمالي</th><th>نشط</th><th>منتهي</th><th>منسحب</th><th>المحصّل</th><th>المتبقي</th><th>نسبة السداد</th></tr></thead>
     <tbody>${rows}</tbody>`;
 
   // Alerts
@@ -527,7 +557,7 @@ function renderStudents() {
   const sectionToggleHtml = canToggleSection ? `
     <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
       <span class="filter-chip ${studentsSection==='contract'?'active':''}" style="font-weight:700" onclick="setStudentsSection('contract')">📄 طلاب عقود</span>
-      <span class="filter-chip ${studentsSection==='summer'?'active':''}" style="font-weight:700" onclick="setStudentsSection('summer')">☀️ طلاب نادي صيفي</span>
+      <span class="filter-chip ${studentsSection==='summer'?'active':''}" style="font-weight:700" onclick="setStudentsSection('summer')">☀️ طلاب نادي صيفي صباحي</span>
       ${isAdmin(currentUser) ? `<span class="filter-chip ${studentsSection==='evening'?'active':''}" style="font-weight:700" onclick="setStudentsSection('evening')">🌙 طلاب مسائي</span>` : ''}
     </div>` : '';
 
@@ -601,7 +631,8 @@ function renderStudentsTable(grade) {
     list = list.filter(s => s.name?.toLowerCase().includes(q) || s.id?.toLowerCase().includes(q) || s.phone1?.includes(q));
   }
 
-  const isEveningView = EVENING_BRANCHES.includes(currentBranch);
+  // نادي صيفي صباحي يستخدم نفس آلية الاشتراك/التجديد/الانسحاب الخاصة بالمسائي
+  const isEveningView = EVENING_BRANCHES.includes(currentBranch) || SUMMER_BRANCHES.includes(currentBranch);
 
   if (isEveningView) {
     if (showArchivedStudents) {
@@ -618,7 +649,8 @@ function renderStudentsTable(grade) {
   const rows = list.map(s => {
     const st  = studentStatus(s);
     const rem = s.net - s.paid;
-    const evening = isEveningBranch(s.branch);
+    // نادي صيفي صباحي معامل زي المسائي: نفس أعمدة/إجراءات الاشتراك والتجديد والانسحاب
+    const evening = isEveningBranch(s.branch) || isSummerBranch(s.branch);
 
     const subscriptionCells = evening ? `
       <td style="font-size:12px">${s.subscriptionType==='monthly'?'شهري':s.subscriptionType==='weekly'?'أسبوعي':'يومي'}</td>
